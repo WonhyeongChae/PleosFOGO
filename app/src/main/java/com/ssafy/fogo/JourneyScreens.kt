@@ -140,8 +140,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             counts.addView(ui.chip("블록 ${profile.blocks.size}", c.paper, 13f, pixel = true))
             counts.addView(ui.chip("오늘 +${profile.newBlocksToday()}", c.lime, 13f, pixel = true),
                 LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
-            panel.addView(AtlasOverview(host, c, catalog.regions.associate { it.id to progress(it) }),
-                LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 470 else 280)))
+            panel.addView(KoreaBoard(host, ui, host.art, fogo.cities, profile.blocks, emptyMap(), null, null, null).apply {
+                contentDescription = "안개 지도"
+            }, LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 470 else 360)))
             // Floating bar at the bottom of the map, like the Figma "nearby" card.
             val bar = ui.column().apply {
                 background = ui.box(c.paper, shadow = true)
@@ -367,7 +368,6 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
 
     private fun board(body: LinearLayout) {
         atlasTabs(body, "지도판")
-        regionStrip(body)
         val stored = profile.placements
         ui.split(body, { left -> mapCard(left, false) }, { right ->
             val panel = ui.card(right)
@@ -401,19 +401,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         host.go(Page.PLACE)
     }
 
-    private fun regionStrip(body: LinearLayout) {
-        ui.strip(body, catalog.regions.map { item -> item.name to {
-            focus(item.spots.first())
-            host.render()
-        } }, region.name)
-        ui.strip(body, region.spots.map { city -> city.spot to {
-            focus(city)
-            host.render()
-        } }, spot.spot)
-    }
-
     private fun placement(body: LinearLayout) {
-        regionStrip(body)
         val owned = catalog.boardItems.filter { profile.owns(it.id) }
         val selected = owned.firstOrNull { it.id == itemId }
         ui.split(body, { left -> mapCard(left, true) }, { right ->
@@ -462,57 +450,27 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
     }
 
     private fun mapCard(body: LinearLayout, editing: Boolean) {
-        val window = windows.getValue(spotId)
         val panel = ui.card(body, c.fog)
-        ui.text(panel, spot.spot, 23f, bold = true)
+        val head = ui.row()
+        panel.addView(head, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(8) })
+        head.addView(ui.label(if (editing) "열린 칸을 골라 붙여요" else "내 지도판", 23f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+        head.addView(ui.chip("열린 블록 ${profile.blocks.size}", c.paper, 13f, pixel = true))
         val owned = catalog.boardItems.associateBy(BoardItem::id)
-        val placed = profile.placements.entries.associate { it.value to owned[it.key] }
-        val open = profile.blocks
-        val selected = owned[itemId]
-        val screenDp = host.resources.configuration.screenWidthDp
-        val columns = window.right - window.left + 1
-        val gridDp = if (ui.wide) ((screenDp - if (editing) 72 else 224) * .56).toInt() else screenDp - 72
-        val rowHeight = (gridDp / columns).coerceIn(34, 90)
-        val grid = ui.column()
-        panel.addView(grid, LinearLayout.LayoutParams(-1, -2))
-        for (y in window.top downTo window.bottom) {
-            val line = ui.row()
-            grid.addView(line, LinearLayout.LayoutParams(-1, ui.rawDp(rowHeight)))
-            for (x in window.left..window.right) {
-                val block = Block(x, y).id
-                val unlocked = block in open
-                val item = placed[block]
-                val preview = editing && pendingCell == block
-                val color = when {
-                    preview -> c.lime
-                    item != null -> item.color
-                    unlocked -> if (c.night) 0xff214a62.toInt() else 0xff71c4ed.toInt()
-                    else -> c.fog
-                }
-                val tile = FrameLayout(host).apply {
-                    val icon = item ?: selected.takeIf { preview }
-                    if (icon != null) {
-                        addView(stickerArt(icon), FrameLayout.LayoutParams(ui.rawDp(rowHeight - 10), ui.rawDp(rowHeight - 10), Gravity.CENTER))
-                    } else if (!unlocked) addView(ui.label("·", 17f, c.muted, true),
-                        FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-                    background = ui.box(color, if (preview) c.dark else if (c.night) 0xff47515d.toInt() else 0xffb5c2cf.toInt())
-                    contentDescription = item?.name ?: when {
-                        preview -> "배치할 칸"
-                        unlocked -> "열린 칸"
-                        else -> "안개 칸"
-                    }
-                    if (editing && unlocked && item == null) setOnClickListener {
-                        if (fogo.parked && itemId != null) {
-                            pendingCell = block
-                            host.render()
-                        }
-                    }
-                }
-                line.addView(tile, LinearLayout.LayoutParams(0, -1, 1f))
+        val placed = profile.placements.entries.mapNotNull { (item, block) -> owned[item]?.let { block to it } }.toMap()
+        val pick: ((String) -> Unit)? = if (!editing) null else fun(block: String) {
+            if (fogo.parked && itemId != null) {
+                pendingCell = block
+                host.render()
             }
         }
-        if (editing) ui.text(panel, "안개 칸과 이미 붙인 칸은 선택할 수 없어요.", 15f, c.muted)
+        val board = KoreaBoard(host, ui, host.art, fogo.cities, profile.blocks, placed,
+            pendingCell.takeIf { editing }, owned[itemId].takeIf { editing }, pick).apply {
+            contentDescription = if (editing) null else "내 지도판"
+        }
+        panel.addView(board, LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 560 else 520)))
+        if (editing) ui.text(panel, "안개 칸과 이미 붙인 칸은 고를 수 없어요.", 15f, c.muted)
     }
+
     private fun stickerArt(item: BoardItem): View {
         val key = when {
             item.magnet -> "mtn"
