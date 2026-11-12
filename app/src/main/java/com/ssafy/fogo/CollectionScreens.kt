@@ -123,6 +123,9 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
                 ui.text(panel, "${catalog.materials.getValue(id)}  ${profile.materialCount(id)} / $count", 19f, bold = true)
             }
             ui.text(panel, availability(selected), 17f, c.muted)
+            catalog.regions.firstOrNull { region -> region.spots.firstOrNull()?.materialId?.let(selected.cost::containsKey) == true }?.let {
+                ui.text(panel, "${it.name} 재료는 ${it.name} 명소에 도착해야 얻을 수 있어요", 16f, c.muted)
+            }
             ui.button(panel, "만들기", true, profile.canCraft(selected)) {
                 if (!fogo.parked) return@button
                 if (profile.craft(selected)) {
@@ -237,17 +240,21 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
         ui.text(body, "$bookPage / 2", 15f, c.muted, pixel = true)
         if (bookPage == 1) {
             ui.split(body, { left ->
-                val memory = ui.card(left, shadow = true)
+                val visits = ui.card(left, shadow = true)
+                ui.text(visits, "NEW REGIONS", 13f, c.muted, pixel = true)
+                ui.text(visits, "처음 가 본 지역", 23f, bold = true)
+                ui.text(visits, "${book.newRegions}곳", 56f, pixel = true)
+                fogo.cities.filter { profile.visitDate(it)?.startsWith(book.month.toString()) == true }.forEach {
+                    ui.text(visits, "${it.spot} · ${it.city} · ${profile.visitDate(it)}", 17f)
+                }
+                ui.text(visits, "도착 티켓 ${book.visits}장", 16f, c.muted)
+                if (book.boardBefore != null && book.boardAfter != null)
+                    ui.text(visits, "이번 달 연 블록 +${book.boardAfter - book.boardBefore}", 15f, c.muted)
+            }, { right ->
+                val memory = ui.card(right)
                 ui.text(memory, "MEMORY", 13f, c.muted, pixel = true)
                 ui.text(memory, "기억에 남은 티켓", 25f, bold = true)
-                ui.text(memory, book.memory ?: "이 달의 방문 기록이 없어요.")
-            }, { right ->
-                val visits = ui.card(right)
-                ui.text(visits, "처음 가 본 지역 ${book.newRegions}곳", 23f, bold = true)
-                ui.text(visits, "도착 티켓 ${book.visits}장")
-                fogo.cities.filter { profile.visitDate(it)?.startsWith(book.month.toString()) == true }.forEach {
-                    ui.text(visits, "${it.spot} · ${profile.visitDate(it)}", 17f)
-                }
+                ui.text(memory, book.memory ?: "쉬어 가는 달이었어요. 이번 달엔 어디로 갈까요?")
             })
         } else {
             ui.split(body, { left ->
@@ -255,12 +262,17 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
                 ui.text(stickers, "STICKERS", 13f, c.muted, pixel = true)
                 ui.text(stickers, "지도판에 붙인 스티커", 25f, bold = true)
                 ui.text(stickers, book.stickers?.let { "${it}장" } ?: "집계 기록 없음", 22f)
-                book.commute?.let { ui.text(stickers, "출퇴근 ${it}번 · 예시") }
+                book.commute?.let {
+                    ui.text(stickers, "ROUTINE", 13f, c.muted, pixel = true)
+                    ui.text(stickers, "출퇴근 ${it}번 · 예시", 22f, bold = true)
+                    ui.text(stickers, "매일 같은 길도 기록이 됐어요", 16f, c.muted)
+                }
             }, { right ->
                 val board = ui.card(right)
-                ui.text(board, "지도판 변화", 25f, bold = true)
+                ui.text(board, "BOARD", 13f, c.muted, pixel = true)
+                ui.text(board, "지도판이 이만큼 넓어졌어요", 25f, bold = true)
                 if (book.boardBefore != null && book.boardAfter != null) {
-                    ui.text(board, "월초 ${book.boardBefore}블록  →  월말 ${book.boardAfter}블록")
+                    ui.text(board, "월초 ${book.boardBefore}블록  →  월말 ${book.boardAfter}블록", 17f, c.muted)
                     ui.progress(board, book.boardBefore.toFloat() / book.boardAfter.coerceAtLeast(1))
                 } else ui.text(board, "이 달에는 블록 집계 기록이 없어요.", color = c.muted)
             })
@@ -274,13 +286,18 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
     }
 
     private fun transfer(body: LinearLayout) {
-        val pass = atlasTicket(host, body, "TRANSFER PASS", "새 차", c.lime)
+        ui.text(body, "새 Pleos 차에 로그인했어요. 우리가 다닌 지도가 그대로 따라왔어요.", 19f, c.muted)
+        val ticket = ticketPass(host, body, TicketSpec(
+            pass = "TRANSFER PASS", tag = "NEW CAR · 새 차", accent = c.lime, stubColor = c.lime,
+            stamp = "HELLO!", stampSub = "${profile.garage.size}대", code = "FOGO ACCOUNT"))
+        val pass = ticket.body
         val origin = previousCar ?: profile.garage.firstOrNull { it != profile.car }
+        ui.text(pass, "FROM → TO", 13f, c.muted, pixel = true)
         ui.text(pass, "${origin ?: "이전 차량"}  →  ${profile.car}", 35f, bold = true)
-        ui.text(pass, "같은 시연 프로필의 기록을 이어받았어요.", 18f, c.muted)
-        ui.text(pass, "지도판 ${profile.blocks.size}블록  ·  티켓북 ${profile.books().size}권", 22f, bold = true)
-        ui.text(pass, "수집품 ${profile.ownedCount}개  ·  ${profile.mascot}와 코스튬 ${profile.costumeCount}종", 19f)
-        ui.text(pass, "차고 ${profile.garage.size}대 · 이전 차 보관 완료", 17f)
+        ticketFields(host, pass, listOf("지도판" to "${profile.blocks.size}블록", "티켓북" to "${profile.books().size}권",
+            "수집품" to "${profile.ownedCount}개", "코스튬" to "${profile.costumeCount}종"))
+        ui.text(pass, "${profile.mascot}와 코스튬이 함께 왔어요", 19f, bold = true)
+        ui.text(pass, "차고 ${profile.garage.size}대 · 이전 차 보관 완료", 17f, c.muted)
         ui.button(body, "차고 보기") { host.go(Page.GARAGE) }
         ui.button(body, "이어서 달리기", true) { host.go(Page.JOURNEY) }
     }
