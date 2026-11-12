@@ -1,8 +1,10 @@
 package com.ssafy.fogo
 
+import android.animation.ValueAnimator
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -70,7 +72,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
 
     private fun intro(body: LinearLayout) {
         ui.split(body, { left ->
-            val view = AtlasArtworkView(host, host.art[if (ui.wide) "drive_wide" else "drive_portrait"], c.night)
+            val view = DriveSceneView(host, host.art[if (ui.wide) "drive_wide" else "drive_portrait"], c.night)
             left.addView(view, LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 470 else 260)))
         }, { right ->
             val panel = ui.card(right, shadow = true)
@@ -204,7 +206,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             if (matched.nearby.isNotEmpty()) ui.text(preview, "같은 시·도 명소 · ${matched.nearby.joinToString(" · ")}", 16f)
             if (profile.visited(matched)) ui.text(preview, "첫 도착 보상 수령 완료", bold = true)
         }
-        preview.addView(AtlasArtworkView(host, host.art["drive_wide"], c.night), LinearLayout.LayoutParams(-1, ui.dp(230)))
+        // Animated while parked; runs faster during the replay so the trip reads as "on the way".
+        preview.addView(DriveSceneView(host, host.art["drive_wide"], c.night, fast = fogo.replayRunning),
+            LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 300 else 240)))
         if (fogo.replayCity == null) {
             ui.button(body, if (fogo.recording) "위치 기록 중지" else "위치 기록 시작", true) {
                 if (fogo.recording) host.stopRecording() else host.explainLocation()
@@ -239,7 +243,22 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             "${city.material} +1".takeIf { arrival.material },
             "${region.name} 자석 +1".takeIf { arrival.magnet })
         ui.text(panel, "받은 것", 20f, bold = true)
-        rewards.forEach { ui.text(panel, it, 18f, bold = true) }
+        val chips = rewards.map { ui.text(panel, it, 18f, bold = true) }
+        if (host.entering && ValueAnimator.areAnimatorsEnabled()) {
+            // Ticket drops in, then each reward pops like a stamp.
+            panel.alpha = 0f
+            panel.translationY = -ui.dp(48).toFloat()
+            panel.animate().alpha(1f).translationY(0f).setDuration(420)
+                .setInterpolator(OvershootInterpolator(1.3f)).start()
+            chips.forEachIndexed { index, chip ->
+                chip.alpha = 0f
+                chip.scaleX = 1.6f
+                chip.scaleY = 1.6f
+                chip.pivotX = 0f
+                chip.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(480L + index * 160L)
+                    .setDuration(220).setInterpolator(OvershootInterpolator(2f)).start()
+            }
+        }
         fogo.ambientStatus?.let { ui.text(panel, it, 16f, c.muted) }
         ui.button(body, "지도판에 스티커 붙이기", true) {
             focus(city)
@@ -353,7 +372,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         panel.addView(grid, LinearLayout.LayoutParams(-1, -2))
         for (y in window.top downTo window.bottom) {
             val line = ui.row()
-            grid.addView(line, LinearLayout.LayoutParams(-1, ui.dp(rowHeight)))
+            grid.addView(line, LinearLayout.LayoutParams(-1, ui.rawDp(rowHeight)))
             for (x in window.left..window.right) {
                 val block = Block(x, y).id
                 val unlocked = block in open
@@ -368,7 +387,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
                 val tile = FrameLayout(host).apply {
                     val icon = item ?: selected.takeIf { preview }
                     if (icon != null) {
-                        addView(stickerArt(icon), FrameLayout.LayoutParams(ui.dp(rowHeight - 10), ui.dp(rowHeight - 10), Gravity.CENTER))
+                        addView(stickerArt(icon), FrameLayout.LayoutParams(ui.rawDp(rowHeight - 10), ui.rawDp(rowHeight - 10), Gravity.CENTER))
                     } else if (!unlocked) addView(ui.label("·", 17f, c.muted, true),
                         FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
                     background = ui.box(color, if (preview) c.dark else if (c.night) 0xff47515d.toInt() else 0xffb5c2cf.toInt())

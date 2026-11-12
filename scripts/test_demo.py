@@ -121,7 +121,7 @@ def main():
     wait_for("아반떼  →  그랜저")
     tap("차고 보기")
     wait_for("차고에 보관 중 · 아반떼")
-    tap("티켓북 책장")
+    tap("리캡")
     month = next(node for node in nodes() if re.fullmatch(r"\d+월 티켓북 열기", node.get("text", "")))
     tap(month.get("text"))
     tap("다음 장 →")

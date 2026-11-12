@@ -30,27 +30,33 @@ class AtlasColors(val night: Boolean) {
     private fun rgb(value: Int) = value or 0xff000000.toInt()
 }
 
-class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: Boolean) {
+/**
+ * [scale] enlarges every dp and text size together so screens follow the Figma proportions
+ * (1700×1184 / 840×1184 frames) on wide Pleos displays instead of rendering at phone size.
+ */
+class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: Boolean, val scale: Float = 1f) {
     private val textFont by lazy { context.resources.getFont(R.font.asta_sans) }
     private val displayFont by lazy { context.resources.getFont(R.font.press_start) }
 
-    fun dp(n: Int) = (n * context.resources.displayMetrics.density + .5f).toInt()
+    fun dp(n: Int) = (n * scale * context.resources.displayMetrics.density + .5f).toInt()
+    /** Unscaled dp, for sizes already derived from the screen width. */
+    fun rawDp(n: Int) = (n * context.resources.displayMetrics.density + .5f).toInt()
     fun column() = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     fun row() = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
 
     fun box(fill: Int, outline: Int = colors.border, shadow: Boolean = false): android.graphics.drawable.Drawable {
-        val face = GradientDrawable().apply { setColor(fill); setStroke(dp(2), outline) }
+        val face = GradientDrawable().apply { setColor(fill); setStroke(dp(3), outline) }
         if (!shadow) return face
         return LayerDrawable(arrayOf(GradientDrawable().apply { setColor(this@AtlasUi.colors.dark) }, face)).apply {
-            setLayerInset(0, dp(3), dp(3), 0, 0)
-            setLayerInset(1, 0, 0, dp(3), dp(3))
+            setLayerInset(0, dp(4), dp(4), 0, 0)
+            setLayerInset(1, 0, 0, dp(4), dp(4))
         }
     }
 
     fun label(value: String, size: Float = 18f, color: Int = colors.ink, bold: Boolean = false, pixel: Boolean = false) =
         TextView(context).apply {
             text = value
-            textSize = size
+            textSize = size * scale
             setTextColor(color)
             typeface = if (pixel) displayFont else Typeface.create(textFont, if (bold) 750 else 500, false)
         }
@@ -71,10 +77,10 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
         Button(context).apply {
             text = value
             isAllCaps = false
-            textSize = 17f
+            textSize = 17f * scale
             typeface = Typeface.create(textFont, 750, false)
-            minHeight = dp(48)
-            minimumHeight = dp(48)
+            minHeight = dp(52)
+            minimumHeight = dp(52)
             val fill = when {
                 primary -> colors.lime
                 selected -> if (colors.night) 0xff324963.toInt() else colors.navy
