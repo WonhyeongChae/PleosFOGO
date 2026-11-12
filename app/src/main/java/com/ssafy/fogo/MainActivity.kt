@@ -19,7 +19,7 @@ enum class Page(val title: String) {
     INTRO("FOGO"), CONSENT("위치 기록 동의"), MASCOT("같이 달릴 친구"), ATLAS("아틀라스"),
     JOURNEY("목적지 미리보기"), ARRIVAL("도착 탑승권"), BOARD("내 지도판"), PLACE("스티커·자석 붙이기"),
     REGION("시·도 상세"), GARAGE("차고"), WORKSHOP("공방"), DRESS("입히기"),
-    RECAP("티켓북 책장"), BOOK("월간 티켓북"), TRANSFER("새 차로 이어가기"), SETTINGS("시연 설정"),
+    RECAP("리캡"), BOOK("월간 티켓북"), TRANSFER("새 차로 이어가기"), SETTINGS("시연 설정"),
 }
 
 class MainActivity : Activity() {
@@ -40,6 +40,9 @@ class MainActivity : Activity() {
     private var dialog: AlertDialog? = null
     private var scroll: ScrollView? = null
     private var lastPage: Page? = null
+    /** True while the current render is the first one for [page]; screens use it for entrance motion. */
+    var entering = false
+        private set
     private val themePreferences by lazy { getSharedPreferences("fogo_appearance", MODE_PRIVATE) }
     private var themeOverride: Boolean? = null
     private val mainTabs = listOf(Page.ATLAS, Page.GARAGE, Page.RECAP, Page.SETTINGS)
@@ -111,7 +114,10 @@ class MainActivity : Activity() {
 
         val config = resources.configuration
         val wide = config.screenWidthDp >= 760 && config.screenWidthDp > config.screenHeightDp
-        ui = AtlasUi(this, AtlasColors(themeOverride ?: fogo.trip.scene.night), wide)
+        // Figma frames are 1700 (wide) / 840 (portrait) units across; grow toward them on large Pleos displays.
+        val scale = if (wide) (config.screenWidthDp / 1240f).coerceIn(1f, 1.4f)
+            else (config.screenWidthDp / 600f).coerceIn(1f, 1.3f)
+        ui = AtlasUi(this, AtlasColors(themeOverride ?: fogo.trip.scene.night), wide, scale)
         window.statusBarColor = colors.navy
         window.navigationBarColor = colors.navy
         if (!fogo.parked) {
@@ -122,13 +128,14 @@ class MainActivity : Activity() {
             return
         }
 
+        entering = page != lastPage
         val oldScroll = if (page == lastPage) scroll?.scrollY ?: 0 else 0
         val root = ui.column().apply { setBackgroundColor(colors.background) }
         val usesRail = page in mainTabs || page in setOf(Page.JOURNEY, Page.BOARD, Page.REGION)
         if (wide && usesRail) {
             val row = ui.row().apply { gravity = Gravity.TOP }
             val content = ui.column()
-            row.addView(rail(), LinearLayout.LayoutParams(ui.dp(152), -1))
+            row.addView(rail(), LinearLayout.LayoutParams(ui.dp(136), -1))
             row.addView(content, LinearLayout.LayoutParams(0, -1, 1f))
             root.addView(row, LinearLayout.LayoutParams(-1, -1))
             header(content)
@@ -159,16 +166,29 @@ class MainActivity : Activity() {
         }
         container.addView(rail, FrameLayout.LayoutParams(-1, -1))
         ui.text(rail, "FOGO", 19f, colors.dark, pixel = true).gravity = Gravity.CENTER
+        val icons = listOf(PixelIconView.ATLAS, PixelIconView.GARAGE, PixelIconView.RECAP, PixelIconView.SETTINGS)
         mainTabs.forEachIndexed { index, item ->
-            val glyph = listOf("▦", "▰", "▤", "⚙")[index]
-            val button = ui.action("$glyph\n${item.title}", selected = tabForPage() == item) { go(item) }
-            if (tabForPage() != item) {
-                button.setTextColor(colors.dark)
-                button.setBackgroundColor(colors.yellow)
+            val selected = tabForPage() == item
+            val tab = ui.column().apply {
+                gravity = Gravity.CENTER
+                isClickable = true
+                contentDescription = item.title
+                background = if (selected) ui.box(colors.paper, shadow = true) else null
+                setPadding(0, ui.dp(10), 0, ui.dp(10))
+                setOnClickListener { go(item) }
             }
-            rail.addView(button, LinearLayout.LayoutParams(-1, ui.dp(76)).apply { topMargin = ui.dp(10) })
+            tab.addView(PixelIconView(this, icons[index], if (selected) colors.ink else colors.dark),
+                LinearLayout.LayoutParams(ui.dp(34), ui.dp(34)).apply { bottomMargin = ui.dp(6) })
+            tab.addView(ui.label(item.title, 15f, if (selected) colors.ink else colors.dark, bold = true).apply {
+                gravity = Gravity.CENTER
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            })
+            rail.addView(tab, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
         }
-        val seam = View(this).apply { setBackgroundColor(colors.dark) }
+        rail.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        rail.addView(PixelIconView(this, BARCODE, colors.dark), LinearLayout.LayoutParams(-1, ui.dp(34)))
+        // Perforated seam between the stub (rail) and the ticket body.
+        val seam = DashedLine(this, colors.dark, ui.dp(10).toFloat(), ui.dp(7).toFloat())
         container.addView(seam, FrameLayout.LayoutParams(ui.dp(3), -1, Gravity.END))
         listOf(Gravity.TOP, Gravity.BOTTOM).forEach { edge ->
             val notch = ImageView(this).apply {
@@ -349,6 +369,7 @@ class MainActivity : Activity() {
     fun message(value: String) = Toast.makeText(this, value, Toast.LENGTH_SHORT).show()
 
     companion object {
+        private val BARCODE = listOf("#.##.#.###.#.##.#.#", "#.##.#.###.#.##.#.#", "#.##.#.###.#.##.#.#")
         private val locationPermissions = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, "pleos.car.permission.FUSED_LOCATION")
     }
 }

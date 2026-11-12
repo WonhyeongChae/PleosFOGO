@@ -1,10 +1,11 @@
 package com.ssafy.fogo
 
+import android.animation.ValueAnimator
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 
 internal data class GridWindow(val left: Int, val right: Int, val bottom: Int, val top: Int) {
@@ -70,7 +71,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
 
     private fun intro(body: LinearLayout) {
         ui.split(body, { left ->
-            val view = AtlasArtworkView(host, host.art[if (ui.wide) "drive_wide" else "drive_portrait"], c.night)
+            val view = DriveSceneView(host, host.art[if (ui.wide) "drive_wide" else "drive_portrait"], c.night)
             left.addView(view, LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 470 else 260)))
         }, { right ->
             val panel = ui.card(right, shadow = true)
@@ -83,10 +84,17 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
     private fun consent(body: LinearLayout) {
         val panel = ui.card(body, shadow = true)
         ui.text(panel, "FOGO는 블록만 기억해요", 34f, bold = true)
-        ui.text(panel, "지나간 곳은 1km 블록으로만 이 기기에 저장해요.")
-        ui.text(panel, "정확한 경로와 시간은 남기지 않아요.", color = c.muted)
-        ui.button(panel, "동의하고 시작", true) { host.requestRecording(true) }
-        ui.button(panel, "기록 없이 둘러보기") { host.go(Page.MASCOT) }
+        ui.text(panel, "필수 · 위치 기록과 계정 저장", 22f, bold = true)
+        listOf("지나간 곳은 1km 블록으로만 저장해요", "정확한 경로와 시간은 남기지 않아요",
+            "기록은 내 계정에 남아 다음 차에서도 이어져요", "설정에서 언제든 끄고 지울 수 있어요").forEach {
+            ui.text(panel, "✓  $it", 19f)
+        }
+        val optional = ui.card(body)
+        ui.text(optional, "선택 · 친구와 지역 순위 참여", 22f, bold = true)
+        ui.text(optional, "친구에게는 시·군·구 단위 지도판과 둘 다 가 본 곳만 보여요", 18f, c.muted)
+        ui.text(body, "선택 항목은 꺼 두어도 혼자 기록할 수 있어요. 집·회사로 보이는 곳은 공유 이미지에서 가려요.", 18f, c.ink)
+        ui.button(body, "동의하고 시작", true) { host.requestRecording(true) }
+        ui.button(body, "기록 없이 둘러보기") { host.go(Page.MASCOT) }
     }
 
     private fun mascots(body: LinearLayout) {
@@ -127,7 +135,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         atlasTabs(body, "지도")
         ui.split(body, { left ->
             val panel = ui.card(left, c.fog)
-            ui.text(panel, "블록 ${profile.blocks.size}     오늘 +${profile.newBlocksToday()}", 20f, bold = true)
+            ui.text(panel, "블록 ${profile.blocks.size}  ·  오늘 +${profile.newBlocksToday()}", 15f, c.muted, pixel = true)
             panel.addView(AtlasOverview(host, c, catalog.regions.associate { it.id to progress(it) }),
                 LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 385 else 245)))
             val destination = fogo.destination
@@ -173,8 +181,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         if (stickers.isNotEmpty()) ui.text(panel, "모은 스티커 · " + stickers.joinToString(" · ") { it.region })
         ui.text(panel, "명소 미션", 24f, bold = true)
         selected.spots.forEach { city ->
-            val state = if (profile.visited(city)) "도착 완료" else "미방문"
-            ui.text(panel, "${city.spot}  ·  $state", 19f, bold = true)
+            val day = profile.visitDate(city)
+            ui.text(panel, if (profile.visited(city)) "✓ ${city.spot}  ·  ${day?.takeLast(5)?.replace('-', '.') ?: ""} 주차"
+                else "□ ${city.spot} 도착", 19f, if (profile.visited(city)) c.ink else c.muted, bold = true)
             ui.text(panel, city.description, 16f, c.muted)
             if (fogo.canOpenReplay || fogo.replayCity != null) ui.button(panel, "${city.spot} 시연 준비", enabled = !fogo.replayRunning) {
                 focus(city)
@@ -204,7 +213,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             if (matched.nearby.isNotEmpty()) ui.text(preview, "같은 시·도 명소 · ${matched.nearby.joinToString(" · ")}", 16f)
             if (profile.visited(matched)) ui.text(preview, "첫 도착 보상 수령 완료", bold = true)
         }
-        preview.addView(AtlasArtworkView(host, host.art["drive_wide"], c.night), LinearLayout.LayoutParams(-1, ui.dp(230)))
+        // Animated while parked; runs faster during the replay so the trip reads as "on the way".
+        preview.addView(DriveSceneView(host, host.art["drive_wide"], c.night, fast = fogo.replayRunning),
+            LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 300 else 240)))
         if (fogo.replayCity == null) {
             ui.button(body, if (fogo.recording) "위치 기록 중지" else "위치 기록 시작", true) {
                 if (fogo.recording) host.stopRecording() else host.explainLocation()
@@ -230,17 +241,52 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
     private fun arrival(body: LinearLayout) {
         val arrival = fogo.trip.arrival ?: return journey(body)
         val city = arrival.city
-        val panel = ticket(body, "ARRIVAL", "도착", city.color)
+        val visitedCount = fogo.cities.count(profile::visited).coerceAtLeast(1)
+        val pass = ticketPass(host, body, TicketSpec(
+            pass = "FOGO PASS", tag = "ARRIVAL · 도착", accent = city.color, stubColor = c.yellow,
+            stamp = if (arrival.sticker) "OPEN!" else "ARRIVED!", stampSub = city.region,
+            code = "FG-" + arrival.day.filter(Char::isDigit).takeLast(8)))
+        val panel = pass.body
+        ui.text(panel, "TO", 13f, c.muted, pixel = true)
         ui.text(panel, "${city.spot} 도착", 39f, bold = true)
-        ui.text(panel, "${city.city}  ·  ${arrival.day}  ·  P 주차", 17f, c.muted)
-        ui.text(panel, arrival.tags.summary(), 19f, bold = true)
-        ui.text(panel, city.description, 17f, c.muted)
+        ui.text(panel, "${city.city}  ·  ${city.region}", 17f, c.muted)
+        ticketFields(host, panel, listOf(
+            "DATE" to arrival.day, "GATE" to "P 주차",
+            "TRIP" to (arrival.tags.summary().ifBlank { "—" }), "NO." to "${visitedCount}번째 명소"))
+        ui.text(panel, city.description, 16f, c.muted)
         val rewards = listOfNotNull("${city.region} 스티커 +1".takeIf { arrival.sticker },
             "${city.material} +1".takeIf { arrival.material },
             "${region.name} 자석 +1".takeIf { arrival.magnet })
-        ui.text(panel, "받은 것", 20f, bold = true)
-        rewards.forEach { ui.text(panel, it, 18f, bold = true) }
+        ui.text(panel, "받은 것", 13f, c.muted, pixel = true)
+        val chipRow = ui.row()
+        panel.addView(chipRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(10) })
+        val chips = rewards.mapIndexed { index, reward ->
+            ui.label(reward, 18f, c.dark, bold = true).apply {
+                background = ui.box(if (index == 0) c.yellow else c.lime, c.dark)
+                setPadding(ui.dp(12), ui.dp(7), ui.dp(12), ui.dp(7))
+                chipRow.addView(this, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = ui.dp(10) })
+            }
+        }
         fogo.ambientStatus?.let { ui.text(panel, it, 16f, c.muted) }
+        if (host.entering && ValueAnimator.areAnimatorsEnabled()) {
+            // Ticket drops in, the stub stamp lands, then each reward pops like a stamp.
+            pass.root.alpha = 0f
+            pass.root.translationY = -ui.dp(48).toFloat()
+            pass.root.animate().alpha(1f).translationY(0f).setDuration(420)
+                .setInterpolator(OvershootInterpolator(1.3f)).start()
+            pass.stamp.scaleX = 2.2f
+            pass.stamp.scaleY = 2.2f
+            pass.stamp.alpha = 0f
+            pass.stamp.animate().scaleX(1f).scaleY(1f).alpha(1f).setStartDelay(420)
+                .setDuration(200).setInterpolator(OvershootInterpolator(2.5f)).start()
+            chips.forEachIndexed { index, chip ->
+                chip.alpha = 0f
+                chip.scaleX = 1.6f
+                chip.scaleY = 1.6f
+                chip.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(640L + index * 160L)
+                    .setDuration(220).setInterpolator(OvershootInterpolator(2f)).start()
+            }
+        }
         ui.button(body, "지도판에 스티커 붙이기", true) {
             focus(city)
             val reward = if (arrival.sticker) city.stickerId else if (arrival.magnet) city.magnetId else city.stickerId
@@ -248,9 +294,6 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         }
         if (fogo.replayCity != null) replayControls(body)
     }
-
-    private fun ticket(body: LinearLayout, title: String, subtitle: String, accent: Int) =
-        atlasTicket(host, body, title, subtitle, accent)
 
     private fun board(body: LinearLayout) {
         atlasTabs(body, "지도판")
@@ -353,7 +396,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         panel.addView(grid, LinearLayout.LayoutParams(-1, -2))
         for (y in window.top downTo window.bottom) {
             val line = ui.row()
-            grid.addView(line, LinearLayout.LayoutParams(-1, ui.dp(rowHeight)))
+            grid.addView(line, LinearLayout.LayoutParams(-1, ui.rawDp(rowHeight)))
             for (x in window.left..window.right) {
                 val block = Block(x, y).id
                 val unlocked = block in open
@@ -368,7 +411,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
                 val tile = FrameLayout(host).apply {
                     val icon = item ?: selected.takeIf { preview }
                     if (icon != null) {
-                        addView(stickerArt(icon), FrameLayout.LayoutParams(ui.dp(rowHeight - 10), ui.dp(rowHeight - 10), Gravity.CENTER))
+                        addView(stickerArt(icon), FrameLayout.LayoutParams(ui.rawDp(rowHeight - 10), ui.rawDp(rowHeight - 10), Gravity.CENTER))
                     } else if (!unlocked) addView(ui.label("·", 17f, c.muted, true),
                         FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
                     background = ui.box(color, if (preview) c.dark else if (c.night) 0xff47515d.toInt() else 0xffb5c2cf.toInt())
@@ -409,22 +452,87 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
     }
 }
 
-internal fun atlasTicket(host: MainActivity, body: LinearLayout, title: String, subtitle: String, accent: Int): LinearLayout {
+internal data class TicketSpec(
+    val pass: String, val tag: String, val accent: Int, val stubColor: Int,
+    val stamp: String, val stampSub: String, val code: String,
+)
+
+internal class TicketParts(val root: View, val body: LinearLayout, val stamp: View)
+
+/**
+ * Boarding-pass card from the Figma ticket screens: navy header band and content on the left (top
+ * when narrow), a dashed perforation, and a coloured stub with a tilted stamp and a pixel barcode.
+ */
+internal fun ticketPass(host: MainActivity, parent: LinearLayout, spec: TicketSpec): TicketParts {
     val ui = host.ui
     val c = ui.colors
-    val panel = ui.card(body, shadow = true)
-    val decoration = FrameLayout(host).apply { setBackgroundColor(c.navy) }
-    panel.addView(decoration, LinearLayout.LayoutParams(-1, ui.dp(57)).apply { bottomMargin = ui.dp(16) })
-    val banner = ui.row().apply { setPadding(ui.dp(14), 0, ui.dp(16), 0) }
-    decoration.addView(banner, FrameLayout.LayoutParams(-1, -1))
-    banner.addView(ui.label(title, if (ui.wide) 19f else 13f, c.white, pixel = true), LinearLayout.LayoutParams(0, -2, 1f))
-    banner.addView(ui.label(subtitle, 17f, c.lime, true))
-    val notch = ImageView(host).apply {
-        setImageResource(if (ui.wide) R.drawable.atlas_ticket_day else R.drawable.atlas_ticket_narrow)
+    val root = (if (ui.wide) ui.row().apply { gravity = Gravity.TOP } else ui.column()).apply {
+        background = ui.box(c.paper, shadow = true)
+        setPadding(ui.dp(3), ui.dp(3), ui.dp(7), ui.dp(7))
     }
-    decoration.addView(notch, FrameLayout.LayoutParams(ui.dp(22), ui.dp(22), Gravity.BOTTOM or Gravity.END)
-        .apply { marginEnd = ui.dp(4); bottomMargin = -ui.dp(11) })
-    panel.addView(View(host).apply { setBackgroundColor(accent) }, LinearLayout.LayoutParams(-1, ui.dp(5))
-        .apply { bottomMargin = ui.dp(12) })
-    return panel
+    parent.addView(root, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(16) })
+
+    val main = ui.column()
+    root.addView(main, if (ui.wide) LinearLayout.LayoutParams(0, -2, 1f) else LinearLayout.LayoutParams(-1, -2))
+    val header = ui.row().apply {
+        setBackgroundColor(c.navy)
+        setPadding(ui.dp(20), ui.dp(14), ui.dp(20), ui.dp(14))
+    }
+    main.addView(header, LinearLayout.LayoutParams(-1, -2))
+    header.addView(ui.label(spec.pass, 19f, c.white, pixel = true), LinearLayout.LayoutParams(0, -2, 1f))
+    header.addView(ui.label(spec.tag, 17f, c.lime, bold = true))
+    main.addView(View(host).apply { setBackgroundColor(spec.accent) }, LinearLayout.LayoutParams(-1, ui.dp(5)))
+    val body = ui.column().apply { setPadding(ui.dp(22), ui.dp(18), ui.dp(22), ui.dp(14)) }
+    main.addView(body, LinearLayout.LayoutParams(-1, -2))
+
+    val seam = DashedLine(host, c.border, ui.dp(10).toFloat(), ui.dp(7).toFloat())
+    root.addView(seam, if (ui.wide) LinearLayout.LayoutParams(ui.dp(3), -1) else LinearLayout.LayoutParams(-1, ui.dp(3)))
+
+    val stub = ui.column().apply {
+        gravity = Gravity.CENTER
+        setBackgroundColor(spec.stubColor)
+        setPadding(ui.dp(18), ui.dp(20), ui.dp(18), ui.dp(18))
+    }
+    root.addView(stub, if (ui.wide) LinearLayout.LayoutParams(ui.dp(230), -1) else LinearLayout.LayoutParams(-1, -2))
+    val content = if (ui.wide) stub else ui.row().apply { gravity = Gravity.CENTER }.also { stub.addView(it) }
+    val stampBox = ui.column().apply {
+        gravity = Gravity.CENTER
+        background = android.graphics.drawable.GradientDrawable().apply { setStroke(ui.dp(4), c.dark) }
+        setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
+        rotation = -8f
+    }
+    stampBox.addView(ui.label(spec.stamp, 20f, c.dark, pixel = true).apply { gravity = Gravity.CENTER })
+    stampBox.addView(ui.label(spec.stampSub, 17f, c.dark, bold = true).apply { gravity = Gravity.CENTER })
+    content.addView(stampBox, LinearLayout.LayoutParams(-2, -2).apply {
+        if (ui.wide) bottomMargin = ui.dp(22) else marginEnd = ui.dp(28)
+    })
+    val code = ui.column().apply { gravity = Gravity.CENTER }
+    content.addView(code)
+    code.addView(ui.label("STAMP", 11f, c.dark, pixel = true).apply { gravity = Gravity.CENTER })
+    code.addView(PixelIconView(host, BARCODE_ROWS, c.dark), LinearLayout.LayoutParams(ui.dp(150), ui.dp(44)).apply {
+        topMargin = ui.dp(6); bottomMargin = ui.dp(6)
+    })
+    code.addView(ui.label(spec.code, 9f, c.dark, pixel = true).apply { gravity = Gravity.CENTER })
+    return TicketParts(root, body, stampBox)
 }
+
+/** DATE / GATE / TRIP / NO. style field strip between dashed rules. */
+internal fun ticketFields(host: MainActivity, parent: LinearLayout, fields: List<Pair<String, String>>) {
+    val ui = host.ui
+    val c = ui.colors
+    parent.addView(DashedLine(host, c.muted, ui.dp(8).toFloat(), ui.dp(6).toFloat()), LinearLayout.LayoutParams(-1, ui.dp(2)))
+    fields.chunked(if (ui.wide) 4 else 2).forEach { line ->
+        val row = ui.row().apply { gravity = Gravity.TOP; setPadding(0, ui.dp(12), 0, ui.dp(12)) }
+        parent.addView(row, LinearLayout.LayoutParams(-1, -2))
+        line.forEach { (label, value) ->
+            val cell = ui.column()
+            row.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+            cell.addView(ui.label(label, 11f, c.muted, pixel = true))
+            cell.addView(ui.label(value, 20f, c.ink, bold = true))
+        }
+    }
+    parent.addView(DashedLine(host, c.muted, ui.dp(8).toFloat(), ui.dp(6).toFloat()),
+        LinearLayout.LayoutParams(-1, ui.dp(2)).apply { bottomMargin = ui.dp(12) })
+}
+
+private val BARCODE_ROWS = listOf("#.##.#.###.#.##.#.##.#.#", "#.##.#.###.#.##.#.##.#.#", "#.##.#.###.#.##.#.##.#.#")

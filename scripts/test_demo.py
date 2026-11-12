@@ -121,11 +121,11 @@ def main():
     wait_for("아반떼  →  그랜저")
     tap("차고 보기")
     wait_for("차고에 보관 중 · 아반떼")
-    tap("티켓북 책장")
+    tap("리캡")
     month = next(node for node in nodes() if re.fullmatch(r"\d+월 티켓북 열기", node.get("text", "")))
     tap(month.get("text"))
     tap("다음 장 →")
-    wait_for("지도판 변화")
+    wait_for("지도판이 이만큼 넓어졌어요")
     print("공방 제작·장착, 이전 탑승권, 티켓북 2쪽 확인", flush=True)
 
     shell("am", "force-stop", "--user", user, package)
