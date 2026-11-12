@@ -1,0 +1,41 @@
+{
+  "car": "아반떼",
+  "mascot": "안개 구름",
+  "costume": "픽셀 비니",
+  "recap": {
+    "title": "지난달 티켓북 · 예시",
+    "regions": 2,
+    "stickers": 2,
+    "memory": "맑은 날, 서울에서 만난 가을",
+    "visits": 6,
+    "before": 24,
+    "after": 48,
+    "commute": 18
+  },
+  "materials": {
+    "MAT_COMMON": 12,
+    "MAT_LIMITED": 1
+  },
+  "recapSamples": [
+    {
+      "offset": 3,
+      "visits": 4,
+      "regions": 2,
+      "memory": "바다에서 만난 저녁 · 해운대",
+      "stickers": 3,
+      "before": 12,
+      "after": 24,
+      "commute": 15
+    },
+    {
+      "offset": 4,
+      "visits": 5,
+      "regions": 4,
+      "memory": "도심에서 만난 아침 · 경복궁",
+      "stickers": 4,
+      "before": 0,
+      "after": 12,
+      "commute": 17
+    }
+  ]
+}

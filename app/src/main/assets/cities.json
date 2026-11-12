@@ -1,0 +1,470 @@
+[
+  {
+    "cityId": "GANGNEUNG",
+    "city": "강릉시",
+    "regionId": "GW_GANGNEUNG",
+    "region": "강릉",
+    "spotId": "SPOT_GW_GYEONGPODAE",
+    "spot": "경포대",
+    "latitude": 37.7955,
+    "longitude": 128.8963,
+    "radiusM": 400,
+    "color": "#00BCD4",
+    "colorName": "청록",
+    "stickerId": "STK_GW_GANGNEUNG",
+    "materialId": "MAT_GANGWON",
+    "material": "강원 재료",
+    "speech": "강릉이 열렸어요",
+    "audio": "arrival_gangneung",
+    "nearby": [
+      "정동진역",
+      "대관령 양떼목장"
+    ],
+    "description": "바다와 호수가 이어지는 경포에서 강릉의 첫 도착을 기록해요.",
+    "weather": "rain",
+    "night": false,
+    "companion": true,
+    "route": [
+      [
+        37.755,
+        128.845
+      ],
+      [
+        37.764,
+        128.859
+      ],
+      [
+        37.773,
+        128.872
+      ],
+      [
+        37.782,
+        128.881
+      ],
+      [
+        37.789,
+        128.89
+      ],
+      [
+        37.7955,
+        128.8963
+      ]
+    ]
+  },
+  {
+    "cityId": "SEOUL",
+    "city": "서울특별시",
+    "regionId": "SE_JONGNO",
+    "region": "종로구",
+    "spotId": "SPOT_SE_GYEONGBOKGUNG",
+    "spot": "경복궁",
+    "latitude": 37.5796,
+    "longitude": 126.977,
+    "radiusM": 400,
+    "color": "#AA00FF",
+    "colorName": "보라",
+    "stickerId": "STK_SE_JONGNO",
+    "materialId": "MAT_SEOUL",
+    "material": "서울 재료",
+    "speech": "종로구가 열렸어요",
+    "audio": "arrival_seoul",
+    "nearby": [
+      "여의도 한강공원",
+      "롯데월드타워"
+    ],
+    "description": "광화문과 궁궐이 만나는 종로에서 서울의 첫 도착을 기록해요.",
+    "weather": "clear",
+    "night": false,
+    "companion": false,
+    "route": [
+      [
+        37.536,
+        126.944
+      ],
+      [
+        37.544,
+        126.948
+      ],
+      [
+        37.554,
+        126.956
+      ],
+      [
+        37.565,
+        126.965
+      ],
+      [
+        37.574,
+        126.972
+      ],
+      [
+        37.5796,
+        126.977
+      ]
+    ]
+  },
+  {
+    "cityId": "BUSAN",
+    "city": "부산광역시",
+    "regionId": "BS_HAEUNDAE",
+    "region": "해운대구",
+    "spotId": "SPOT_BS_HAEUNDAE",
+    "spot": "해운대해수욕장",
+    "latitude": 35.1587,
+    "longitude": 129.1604,
+    "radiusM": 500,
+    "color": "#2979FF",
+    "colorName": "파랑",
+    "stickerId": "STK_BS_HAEUNDAE",
+    "materialId": "MAT_BUSAN",
+    "material": "부산 재료",
+    "speech": "해운대구가 열렸어요",
+    "audio": "arrival_busan",
+    "nearby": [
+      "광안리해수욕장",
+      "태종대"
+    ],
+    "description": "바닷가 야경이 이어지는 해운대에서 부산의 첫 도착을 기록해요.",
+    "weather": "clear",
+    "night": true,
+    "companion": false,
+    "route": [
+      [
+        35.165,
+        129.105
+      ],
+      [
+        35.162,
+        129.116
+      ],
+      [
+        35.159,
+        129.128
+      ],
+      [
+        35.157,
+        129.139
+      ],
+      [
+        35.158,
+        129.149
+      ],
+      [
+        35.1587,
+        129.1604
+      ]
+    ]
+  },
+  {
+    "cityId": "GW_GANGNEUNG",
+    "city": "강릉시",
+    "regionId": "GW_GANGNEUNG",
+    "region": "강릉",
+    "spotId": "SPOT_GW_JEONGDONGJIN",
+    "spot": "정동진역",
+    "latitude": 37.6916,
+    "longitude": 129.0339,
+    "radiusM": 300,
+    "color": "#00BCD4",
+    "colorName": "청록",
+    "stickerId": "STK_GW_GANGNEUNG",
+    "materialId": "MAT_GANGWON",
+    "material": "강원 재료",
+    "speech": "정동진역에 도착했어요",
+    "audio": "arrival_jeongdongjin",
+    "nearby": [
+      "경포대",
+      "대관령 양떼목장"
+    ],
+    "description": "바다에서 가장 가까운 기차역",
+    "weather": "rain",
+    "night": false,
+    "companion": true,
+    "route": [
+      [
+        37.6606,
+        128.9949
+      ],
+      [
+        37.6666,
+        129.0019
+      ],
+      [
+        37.6736,
+        129.0099
+      ],
+      [
+        37.6796,
+        129.0179
+      ],
+      [
+        37.6856,
+        129.0259
+      ],
+      [
+        37.6916,
+        129.0339
+      ]
+    ]
+  },
+  {
+    "cityId": "GW_PYEONGCHANG",
+    "city": "평창군",
+    "regionId": "GW_PYEONGCHANG",
+    "region": "평창",
+    "spotId": "SPOT_GW_SHEEPFARM",
+    "spot": "대관령 양떼목장",
+    "latitude": 37.6884,
+    "longitude": 128.7506,
+    "radiusM": 300,
+    "color": "#00BCD4",
+    "colorName": "청록",
+    "stickerId": "STK_GW_PYEONGCHANG",
+    "materialId": "MAT_GANGWON",
+    "material": "강원 재료",
+    "speech": "대관령 양떼목장에 도착했어요",
+    "audio": "arrival_sheepfarm",
+    "nearby": [
+      "경포대",
+      "정동진역"
+    ],
+    "description": "대관령 능선의 초지 목장",
+    "weather": "rain",
+    "night": false,
+    "companion": true,
+    "route": [
+      [
+        37.6574,
+        128.7116
+      ],
+      [
+        37.6634,
+        128.7186
+      ],
+      [
+        37.6704,
+        128.7266
+      ],
+      [
+        37.6764,
+        128.7346
+      ],
+      [
+        37.6824,
+        128.7426
+      ],
+      [
+        37.6884,
+        128.7506
+      ]
+    ]
+  },
+  {
+    "cityId": "SE_YEONGDEUNGPO",
+    "city": "서울특별시",
+    "regionId": "SE_YEONGDEUNGPO",
+    "region": "영등포구",
+    "spotId": "SPOT_SE_YEOUIDO",
+    "spot": "여의도 한강공원",
+    "latitude": 37.5284,
+    "longitude": 126.9327,
+    "radiusM": 500,
+    "color": "#AA00FF",
+    "colorName": "보라",
+    "stickerId": "STK_SE_YEONGDEUNGPO",
+    "materialId": "MAT_SEOUL",
+    "material": "서울 재료",
+    "speech": "여의도 한강공원에 도착했어요",
+    "audio": "arrival_yeouido",
+    "nearby": [
+      "경복궁",
+      "롯데월드타워"
+    ],
+    "description": "한강을 따라 펼쳐진 도심 공원",
+    "weather": "clear",
+    "night": false,
+    "companion": false,
+    "route": [
+      [
+        37.4974,
+        126.8937
+      ],
+      [
+        37.5034,
+        126.9007
+      ],
+      [
+        37.5104,
+        126.9087
+      ],
+      [
+        37.5164,
+        126.9167
+      ],
+      [
+        37.5224,
+        126.9247
+      ],
+      [
+        37.5284,
+        126.9327
+      ]
+    ]
+  },
+  {
+    "cityId": "SE_SONGPA",
+    "city": "서울특별시",
+    "regionId": "SE_SONGPA",
+    "region": "송파구",
+    "spotId": "SPOT_SE_LOTTETOWER",
+    "spot": "롯데월드타워",
+    "latitude": 37.5126,
+    "longitude": 127.1025,
+    "radiusM": 300,
+    "color": "#AA00FF",
+    "colorName": "보라",
+    "stickerId": "STK_SE_SONGPA",
+    "materialId": "MAT_SEOUL",
+    "material": "서울 재료",
+    "speech": "롯데월드타워에 도착했어요",
+    "audio": "arrival_lottetower",
+    "nearby": [
+      "경복궁",
+      "여의도 한강공원"
+    ],
+    "description": "서울에서 가장 높은 전망대",
+    "weather": "clear",
+    "night": false,
+    "companion": false,
+    "route": [
+      [
+        37.4816,
+        127.0635
+      ],
+      [
+        37.4876,
+        127.0705
+      ],
+      [
+        37.4946,
+        127.0785
+      ],
+      [
+        37.5006,
+        127.0865
+      ],
+      [
+        37.5066,
+        127.0945
+      ],
+      [
+        37.5126,
+        127.1025
+      ]
+    ]
+  },
+  {
+    "cityId": "BS_SUYEONG",
+    "city": "부산광역시",
+    "regionId": "BS_SUYEONG",
+    "region": "수영구",
+    "spotId": "SPOT_BS_GWANGALLI",
+    "spot": "광안리해수욕장",
+    "latitude": 35.1532,
+    "longitude": 129.1186,
+    "radiusM": 500,
+    "color": "#2979FF",
+    "colorName": "파랑",
+    "stickerId": "STK_BS_SUYEONG",
+    "materialId": "MAT_BUSAN",
+    "material": "부산 재료",
+    "speech": "광안리해수욕장에 도착했어요",
+    "audio": "arrival_gwangalli",
+    "nearby": [
+      "해운대해수욕장",
+      "태종대"
+    ],
+    "description": "광안대교가 보이는 해변",
+    "weather": "clear",
+    "night": true,
+    "companion": false,
+    "route": [
+      [
+        35.1222,
+        129.0796
+      ],
+      [
+        35.1282,
+        129.0866
+      ],
+      [
+        35.1352,
+        129.0946
+      ],
+      [
+        35.1412,
+        129.1026
+      ],
+      [
+        35.1472,
+        129.1106
+      ],
+      [
+        35.1532,
+        129.1186
+      ]
+    ]
+  },
+  {
+    "cityId": "BS_YEONGDO",
+    "city": "부산광역시",
+    "regionId": "BS_YEONGDO",
+    "region": "영도구",
+    "spotId": "SPOT_BS_TAEJONGDAE",
+    "spot": "태종대",
+    "latitude": 35.0532,
+    "longitude": 129.085,
+    "radiusM": 300,
+    "color": "#2979FF",
+    "colorName": "파랑",
+    "stickerId": "STK_BS_YEONGDO",
+    "materialId": "MAT_BUSAN",
+    "material": "부산 재료",
+    "speech": "태종대에 도착했어요",
+    "audio": "arrival_taejongdae",
+    "nearby": [
+      "해운대해수욕장",
+      "광안리해수욕장"
+    ],
+    "description": "영도 끝 해안 절벽 공원",
+    "weather": "clear",
+    "night": true,
+    "companion": false,
+    "route": [
+      [
+        35.0222,
+        129.046
+      ],
+      [
+        35.0282,
+        129.053
+      ],
+      [
+        35.0352,
+        129.061
+      ],
+      [
+        35.0412,
+        129.069
+      ],
+      [
+        35.0472,
+        129.077
+      ],
+      [
+        35.0532,
+        129.085
+      ]
+    ]
+  }
+]

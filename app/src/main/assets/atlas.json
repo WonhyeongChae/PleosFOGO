@@ -1,0 +1,12 @@
+{
+  "regions":[{"id":"GANGWON","name":"강원"},{"id":"SEOUL","name":"서울"},{"id":"BUSAN","name":"부산"}],
+  "materials":{"MAT_GANGWON":"강원","MAT_SEOUL":"서울","MAT_BUSAN":"부산","MAT_COMMON":"공용","MAT_LIMITED":"한정"},
+  "costumes":[
+    {"id":"CST_PIXEL_BEANIE","name":"픽셀 비니","slot":"hat","color":"#B8F53C","cost":{"MAT_GANGWON":2,"MAT_COMMON":3}},
+    {"id":"CST_LIME_WRAP","name":"라임 래핑","slot":"wrap","color":"#B8F53C","cost":{"MAT_SEOUL":2,"MAT_COMMON":4}},
+    {"id":"CST_SEA_BG","name":"바다 배경","slot":"bg","color":"#CDE2F4","cost":{"MAT_BUSAN":3,"MAT_COMMON":2}},
+    {"id":"CST_WHALE_HAT","name":"고래 모자","slot":"hat","color":"#7B5CFF","cost":{"MAT_LIMITED":1,"MAT_COMMON":5}},
+    {"id":"CST_SUNSET_WRAP","name":"노을 래핑","slot":"wrap","color":"#FFA888","cost":{"MAT_SEOUL":1,"MAT_COMMON":3}},
+    {"id":"CST_CLOUD_SCARF","name":"구름 목도리","slot":"clothes","color":"#E4E6EA","cost":{"MAT_COMMON":6}}
+  ]
+}
