@@ -135,29 +135,53 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         atlasTabs(body, "지도")
         ui.split(body, { left ->
             val panel = ui.card(left, c.fog)
-            ui.text(panel, "블록 ${profile.blocks.size}  ·  오늘 +${profile.newBlocksToday()}", 15f, c.muted, pixel = true)
+            val counts = ui.row()
+            panel.addView(counts, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(8) })
+            counts.addView(ui.chip("블록 ${profile.blocks.size}", c.paper, 13f, pixel = true))
+            counts.addView(ui.chip("오늘 +${profile.newBlocksToday()}", c.lime, 13f, pixel = true),
+                LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
             panel.addView(AtlasOverview(host, c, catalog.regions.associate { it.id to progress(it) }),
-                LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 385 else 245)))
-            val destination = fogo.destination
-            if (destination != null) ui.text(panel, "현재 목적지 · ${destination.name}", 17f, bold = true)
-            ui.button(panel, "목적지 미리보기") { host.go(Page.JOURNEY) }
-            if (fogo.canOpenReplay || fogo.replayCity != null) {
-                ui.button(panel, if (fogo.replayCity == null) "도시 예시 재생" else "다른 도시 예시", true,
-                    !fogo.replayRunning, host::selectReplay)
+                LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 470 else 280)))
+            // Floating bar at the bottom of the map, like the Figma "nearby" card.
+            val bar = ui.column().apply {
+                background = ui.box(c.paper, shadow = true)
+                setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(12))
             }
+            panel.addView(bar, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(10) })
+            val destination = fogo.destination
+            ui.text(bar, "DESTINATION", 11f, c.muted, pixel = true)
+            ui.text(bar, destination?.let { "현재 목적지 · ${it.name}" } ?: "내비에서 목적지를 정하면 미리보기가 열려요", 18f, bold = true)
+            val actions = mutableListOf(Act("목적지 미리보기") { host.go(Page.JOURNEY) })
+            if (fogo.canOpenReplay || fogo.replayCity != null) {
+                actions += Act(if (fogo.replayCity == null) "도시 예시 재생" else "다른 도시 예시", true, !fogo.replayRunning,
+                    click = host::selectReplay)
+            }
+            ui.actions(bar, actions, topMargin = 6)
         }, { right ->
             val panel = ui.card(right)
             ui.text(panel, "지역별 진행", 25f, bold = true)
-            ui.text(panel, "시·도마다 명소 3곳에 도착하면 자석이 열려요.", 17f, c.muted)
+            ui.text(panel, "시·도마다 명소 3곳에 도착하면 자석이 열려요.", 16f, c.muted)
             catalog.regions.forEach { item ->
                 val percent = progress(item)
-                ui.text(panel, "${item.name}  ·  ${(percent * 100).toInt()}%  ·  명소 ${item.opened(profile)}/3", 19f, bold = true)
-                ui.progress(panel, percent)
-                ui.button(panel, "${item.name} 지역 카드 보기") {
-                    regionId = item.id
-                    host.go(Page.REGION)
+                val line = ui.row().apply {
+                    isClickable = true
+                    contentDescription = "${item.name} 지역 카드 보기"
+                    background = if (item.id == regionId) ui.box(c.fog) else null
+                    setPadding(ui.dp(8), ui.dp(8), ui.dp(8), ui.dp(8))
+                    setOnClickListener { regionId = item.id; host.go(Page.REGION) }
                 }
+                panel.addView(line, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(4) })
+                line.addView(ui.label(item.name, 19f, bold = true), LinearLayout.LayoutParams(ui.dp(60), -2))
+                val bar = ui.column()
+                line.addView(bar, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.dp(10) })
+                ui.progress(bar, percent)
+                line.addView(ui.label("${(percent * 100).toInt()}%", 15f, c.muted, pixel = true))
+                if (profile.owns(item.magnet.id)) line.addView(ui.chip("자석!", c.violet, 13f, c.onViolet),
+                    LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
+                else line.addView(ui.label("명소 ${item.opened(profile)}/3", 14f, c.muted),
+                    LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
             }
+            ui.button(panel, "시·도 상세 보기", true) { host.go(Page.REGION) }
         })
     }
 
@@ -170,31 +194,64 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
     private fun regionDetails(body: LinearLayout) {
         val selected = region
         val cells = regionCells.getValue(selected.id)
-        val panel = ui.card(body)
-        ui.text(panel, selected.name, 36f, bold = true)
         val open = profile.blocks
-        ui.text(panel, "${cells.count { it in open }} / ${cells.size} 블록 · ${selected.opened(profile)} / 3 명소")
-        ui.progress(panel, progress(selected))
-        ui.text(panel, "${selected.name} 재료 ${profile.materialCount(selected.spots.first())}개")
-        ui.text(panel, if (profile.owns(selected.magnet.id)) "${selected.magnet.name} 획득" else "명소 3곳에 처음 도착하면 ${selected.magnet.name}을 받아요.", bold = true)
-        val stickers = selected.spots.distinctBy(City::stickerId).filter(profile::opened)
-        if (stickers.isNotEmpty()) ui.text(panel, "모은 스티커 · " + stickers.joinToString(" · ") { it.region })
-        ui.text(panel, "명소 미션", 24f, bold = true)
-        selected.spots.forEach { city ->
-            val day = profile.visitDate(city)
-            ui.text(panel, if (profile.visited(city)) "✓ ${city.spot}  ·  ${day?.takeLast(5)?.replace('-', '.') ?: ""} 주차"
-                else "□ ${city.spot} 도착", 19f, if (profile.visited(city)) c.ink else c.muted, bold = true)
-            ui.text(panel, city.description, 16f, c.muted)
-            if (fogo.canOpenReplay || fogo.replayCity != null) ui.button(panel, "${city.spot} 시연 준비", enabled = !fogo.replayRunning) {
-                focus(city)
-                host.go(Page.JOURNEY)
-                fogo.prepareReplay(city)
+        ui.split(body, { left ->
+            val panel = ui.card(left, shadow = true)
+            ui.text(panel, selected.name, 36f, bold = true)
+            val chips = ui.row()
+            panel.addView(chips, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(10) })
+            chips.addView(ui.chip("${(progress(selected) * 100).toInt()}% 열림", c.lime, 15f))
+            chips.addView(ui.label("${cells.count { it in open }} / ${cells.size} 블록", 16f, c.muted),
+                LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(12) })
+            ui.progress(panel, progress(selected))
+            val tags = ui.row()
+            panel.addView(tags)
+            tags.addView(ui.chip("${selected.name} 재료 ${profile.materialCount(selected.spots.first())}개", c.yellow, 15f))
+            tags.addView(ui.chip("명소 ${selected.opened(profile)} / 3", c.paper, 15f),
+                LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(10) })
+
+            val owned = profile.owns(selected.magnet.id)
+            val magnet = ui.card(left, if (owned) c.violet else c.fog, shadow = owned)
+            ui.text(magnet, "MAGNET", 11f, if (owned) c.onViolet else c.muted, pixel = true)
+            ui.text(magnet, if (owned) "${selected.magnet.name} 획득" else selected.magnet.name, 24f,
+                if (owned) c.onViolet else c.ink, bold = true)
+            if (!owned) ui.text(magnet, "명소 3곳에 처음 도착하면 받아요", 16f, c.muted)
+
+            val stickers = selected.spots.distinctBy(City::stickerId).filter(profile::opened)
+            val shelf = ui.card(left)
+            ui.text(shelf, "모은 스티커", 20f, bold = true)
+            val row = ui.row()
+            shelf.addView(row)
+            stickers.forEach { city ->
+                catalog.boardItems.firstOrNull { it.id == city.stickerId }?.let {
+                    row.addView(stickerArt(it), LinearLayout.LayoutParams(ui.dp(52), ui.dp(52)).apply { marginEnd = ui.dp(10) })
+                }
             }
-        }
-        ui.button(panel, "지도판에서 보기", true) {
-            focus(selected.spots.first())
-            host.go(Page.BOARD)
-        }
+            if (stickers.isEmpty()) ui.text(shelf, "아직 없어요", 16f, c.muted)
+            else ui.text(shelf, stickers.joinToString(" · ") { it.region }, 15f, c.muted)
+        }, { right ->
+            val panel = ui.card(right)
+            ui.text(panel, "명소 미션", 24f, bold = true)
+            selected.spots.forEach { city ->
+                val visited = profile.visited(city)
+                val day = profile.visitDate(city)
+                val line = ui.row().apply { setPadding(0, ui.dp(10), 0, ui.dp(4)) }
+                panel.addView(line, LinearLayout.LayoutParams(-1, -2))
+                line.addView(ui.label(if (visited) "✓ ${city.spot}  ·  ${day?.takeLast(5)?.replace('-', '.') ?: ""} 주차"
+                    else "□ ${city.spot} 도착", 19f, if (visited) c.ink else c.muted, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+                line.addView(ui.chip(if (visited) "기록됨" else "아직", if (visited) c.lime else c.fog, 14f))
+                ui.text(panel, city.description, 15f, c.muted)
+                if (fogo.canOpenReplay || fogo.replayCity != null) ui.button(panel, "${city.spot} 시연 준비", enabled = !fogo.replayRunning) {
+                    focus(city)
+                    host.go(Page.JOURNEY)
+                    fogo.prepareReplay(city)
+                }
+            }
+            ui.button(right, "지도판에서 보기", true) {
+                focus(selected.spots.first())
+                host.go(Page.BOARD)
+            }
+        })
     }
 
     private fun journey(body: LinearLayout) {
@@ -228,46 +285,55 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
                 ui.button(body, "도시 예시 재생", click = host::selectReplay)
             }
         } else {
-            ui.button(body, "주행 재생", true, !fogo.replayRunning, fogo::startReplay)
-            replayControls(body)
+            ui.actions(body, listOf(
+                Act("다른 도시 예시", enabled = !fogo.replayRunning, click = host::selectReplay),
+                Act("실제 차량 모드로", enabled = !fogo.replayRunning, click = fogo::leaveReplay),
+                Act("주행 재생", true, !fogo.replayRunning, 1.6f, fogo::startReplay)))
         }
-    }
-
-    private fun replayControls(body: LinearLayout) {
-        ui.button(body, "다른 도시 예시", enabled = !fogo.replayRunning, click = host::selectReplay)
-        ui.button(body, "실제 차량 모드로 돌아가기", enabled = !fogo.replayRunning, click = fogo::leaveReplay)
     }
 
     private fun arrival(body: LinearLayout) {
         val arrival = fogo.trip.arrival ?: return journey(body)
         val city = arrival.city
         val visitedCount = fogo.cities.count(profile::visited).coerceAtLeast(1)
-        val pass = ticketPass(host, body, TicketSpec(
+        val sheet = popup(host, body)
+        val pass = ticketPass(host, sheet, TicketSpec(
             pass = "FOGO PASS", tag = "ARRIVAL · 도착", accent = city.color, stubColor = c.yellow,
             stamp = if (arrival.sticker) "OPEN!" else "ARRIVED!", stampSub = city.region,
             code = "FG-" + arrival.day.filter(Char::isDigit).takeLast(8)))
         val panel = pass.body
-        ui.text(panel, "TO", 13f, c.muted, pixel = true)
-        ui.text(panel, "${city.spot} 도착", 39f, bold = true)
-        ui.text(panel, "${city.city}  ·  ${city.region}", 17f, c.muted)
+        val route = ui.row().apply { gravity = Gravity.BOTTOM }
+        panel.addView(route, LinearLayout.LayoutParams(-1, -2))
+        val to = ui.column()
+        route.addView(to)
+        to.addView(ui.label("TO", 13f, c.muted, pixel = true))
+        to.addView(ui.label(city.region, 64f, bold = true))
+        route.addView(ui.chip(if (arrival.sticker) "OPEN!" else "AGAIN", c.lime, 18f, pixel = true),
+            LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(16); bottomMargin = ui.dp(14) })
+        ui.text(panel, "${city.spot} 도착", 22f, bold = true)
+        ui.text(panel, "${city.city}  ·  ${city.description}", 15f, c.muted)
         ticketFields(host, panel, listOf(
             "DATE" to arrival.day, "GATE" to "P 주차",
-            "TRIP" to (arrival.tags.summary().ifBlank { "—" }), "NO." to "${visitedCount}번째 명소"))
-        ui.text(panel, city.description, 16f, c.muted)
+            "TRIP" to arrival.tags.summary(), "NO." to "${visitedCount}번째 명소"))
         val rewards = listOfNotNull("${city.region} 스티커 +1".takeIf { arrival.sticker },
             "${city.material} +1".takeIf { arrival.material },
             "${region.name} 자석 +1".takeIf { arrival.magnet })
-        ui.text(panel, "받은 것", 13f, c.muted, pixel = true)
+        val gift = ui.row()
+        panel.addView(gift, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(8) })
+        catalog.boardItems.firstOrNull { it.id == city.stickerId }?.let {
+            gift.addView(stickerArt(it), LinearLayout.LayoutParams(ui.dp(78), ui.dp(78)).apply { marginEnd = ui.dp(16) })
+        }
+        val list = ui.column()
+        gift.addView(list, LinearLayout.LayoutParams(0, -2, 1f))
+        list.addView(ui.label(if (rewards.isEmpty()) "이미 받은 곳이에요" else "받은 것", 13f, c.muted, pixel = rewards.isNotEmpty()))
         val chipRow = ui.row()
-        panel.addView(chipRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(10) })
+        list.addView(chipRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(6) })
         val chips = rewards.mapIndexed { index, reward ->
-            ui.label(reward, 18f, c.dark, bold = true).apply {
-                background = ui.box(if (index == 0) c.yellow else c.lime, c.dark)
-                setPadding(ui.dp(12), ui.dp(7), ui.dp(12), ui.dp(7))
-                chipRow.addView(this, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = ui.dp(10) })
+            ui.chip(reward, if (index == 0) c.yellow else c.lime, 18f).also {
+                chipRow.addView(it, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = ui.dp(10) })
             }
         }
-        fogo.ambientStatus?.let { ui.text(panel, it, 16f, c.muted) }
+        fogo.ambientStatus?.let { ui.text(panel, it, 15f, c.muted) }
         if (host.entering && ValueAnimator.areAnimatorsEnabled()) {
             // Ticket drops in, the stub stamp lands, then each reward pops like a stamp.
             pass.root.alpha = 0f
@@ -287,12 +353,16 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
                     .setDuration(220).setInterpolator(OvershootInterpolator(2f)).start()
             }
         }
-        ui.button(body, "지도판에 스티커 붙이기", true) {
+        val actions = mutableListOf<Act>()
+        if (fogo.replayCity != null) actions += Act("다른 도시 예시", enabled = !fogo.replayRunning, click = host::selectReplay)
+        actions += Act("지도판에 스티커 붙이기", true, weight = 2f) {
             focus(city)
             val reward = if (arrival.sticker) city.stickerId else if (arrival.magnet) city.magnetId else city.stickerId
             startPlacement(reward)
         }
-        if (fogo.replayCity != null) replayControls(body)
+        ui.actions(sheet, actions)
+        if (fogo.replayCity != null) ui.actions(sheet, listOf(
+            Act("실제 차량 모드로 돌아가기", enabled = !fogo.replayRunning, click = fogo::leaveReplay)))
     }
 
     private fun board(body: LinearLayout) {
@@ -302,11 +372,22 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         ui.split(body, { left -> mapCard(left, false) }, { right ->
             val panel = ui.card(right)
             val owned = catalog.boardItems.filter { profile.owns(it.id) }
-            ui.text(panel, "스티커 ${owned.count { !it.magnet }}   자석 ${owned.count { it.magnet }}", 23f, bold = true)
+            ui.text(panel, "붙일 수 있는 것", 23f, bold = true)
+            val counts = ui.row()
+            panel.addView(counts, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(10) })
+            counts.addView(ui.chip("스티커 ${owned.count { !it.magnet }}", c.yellow, 15f))
+            counts.addView(ui.chip("자석 ${owned.count { it.magnet }}", c.violet, 15f, c.onViolet),
+                LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
             if (owned.isEmpty()) ui.text(panel, "첫 도착을 기록하면 스티커가 열려요.", color = c.muted)
-            owned.forEach { item ->
-                ui.text(panel, item.name + if (stored.containsKey(item.id)) " · 배치 완료" else "", 18f)
-            }
+            ui.grid(panel, owned.map { item ->
+                val placed = stored.containsKey(item.id)
+                ui.column().apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    alpha = if (placed) .6f else 1f
+                    addView(stickerArt(item), LinearLayout.LayoutParams(ui.dp(58), ui.dp(58)).apply { bottomMargin = ui.dp(6) })
+                    addView(ui.label(item.name + if (placed) " · 배치 완료" else "", 14f).apply { gravity = Gravity.CENTER })
+                }
+            }, if (ui.wide) 3 else 4)
             ui.button(panel, "붙이기", true, owned.isNotEmpty()) { startPlacement(null) }
         })
     }
@@ -450,6 +531,25 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             addView(AtlasArtworkView(host, host.art[key]), FrameLayout.LayoutParams(ui.dp(30), ui.dp(30), Gravity.CENTER))
         }
     }
+}
+
+/**
+ * Figma shows tickets (arrival, new car) as a popup over a dimmed screen: dim the page and centre a
+ * column about two thirds wide. Returns the column to build into.
+ */
+internal fun popup(host: MainActivity, body: LinearLayout): LinearLayout {
+    val ui = host.ui
+    val c = ui.colors
+    body.setBackgroundColor((if (c.night) 0xff000000.toInt() else c.navy) and 0x00ffffff or (0x8c shl 24))
+    body.gravity = Gravity.CENTER_VERTICAL
+    if (!ui.wide) return body
+    val line = ui.row()
+    body.addView(line, LinearLayout.LayoutParams(-1, -2))
+    val sheet = ui.column()
+    line.addView(View(host), LinearLayout.LayoutParams(0, 1, 0.12f))
+    line.addView(sheet, LinearLayout.LayoutParams(0, -2, 0.76f))
+    line.addView(View(host), LinearLayout.LayoutParams(0, 1, 0.12f))
+    return sheet
 }
 
 internal data class TicketSpec(
