@@ -132,7 +132,7 @@ def main():
     launch()
     tap("차고")
     wait_for("그랜저")
-    wait_for("옷  ·  구름 목도리")
+    wait_for("구름 목도리")
     wait_for("지도판 배치 4개")
     tap("아틀라스")
     tap("도시 예시 재생")

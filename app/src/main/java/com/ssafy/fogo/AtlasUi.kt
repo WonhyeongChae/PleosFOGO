@@ -24,6 +24,8 @@ class AtlasColors(val night: Boolean) {
     val navy = rgb(if (night) 0x1d1f24 else 0x002c5f)
     val yellow = rgb(if (night) 0xe8be2a else 0xffd43b)
     val lime = rgb(if (night) 0x9bd62a else 0xb8f53c)
+    val violet = rgb(if (night) 0xa893ff else 0x7b5cff)
+    val onViolet = if (night) rgb(0x0b1426) else Color.WHITE
     val dark = rgb(0x0b1426)
     val white = Color.WHITE
 
@@ -99,6 +101,53 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
     }
 
+    /** Figma action bar: buttons side by side, the primary one usually wider. */
+    fun actions(parent: LinearLayout, items: List<Act>, topMargin: Int = 10) {
+        val line = row()
+        items.forEachIndexed { index, item ->
+            line.addView(action(item.label, primary = item.primary, enabled = item.enabled, click = item.click),
+                LinearLayout.LayoutParams(0, -2, item.weight).apply { if (index > 0) marginStart = dp(12) })
+        }
+        parent.addView(line, LinearLayout.LayoutParams(-1, -2).apply { this.topMargin = dp(topMargin) })
+    }
+
+    /** Bordered chip, the small tag used for counts, rewards and statuses in the Figma screens. */
+    fun chip(value: String, fill: Int, size: Float = 16f, color: Int = colors.dark, pixel: Boolean = false) =
+        label(value, size, color, bold = !pixel, pixel = pixel).apply {
+            background = box(fill, colors.dark)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+        }
+
+    /** Lays out [views] left to right, wrapping into rows of [perRow]. */
+    fun grid(parent: LinearLayout, views: List<View>, perRow: Int, gap: Int = 10, height: Int = -2) {
+        views.chunked(perRow).forEach { items ->
+            val line = row().apply { gravity = Gravity.TOP }
+            parent.addView(line, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(gap) })
+            items.forEachIndexed { index, view ->
+                line.addView(view, LinearLayout.LayoutParams(0, height, 1f).apply { if (index > 0) marginStart = dp(gap) })
+            }
+            repeat(perRow - items.size) {
+                line.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = dp(gap) })
+            }
+        }
+    }
+
+    /** Wraps [views] (chips) into lines that fit, measured against [maxWidth] px. */
+    fun flow(parent: LinearLayout, views: List<View>, maxWidth: Int, gap: Int = 8) {
+        var line: LinearLayout? = null
+        var used = 0
+        views.forEach { view ->
+            view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+            val width = view.measuredWidth + dp(gap)
+            if (line == null || used + width > maxWidth) {
+                line = row().also { parent.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(gap) }) }
+                used = 0
+            }
+            line!!.addView(view, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(gap) })
+            used += width
+        }
+    }
+
     fun strip(parent: LinearLayout, choices: List<Pair<String, () -> Unit>>, selected: String? = null) {
         val container = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false }
         val line = row()
@@ -135,3 +184,6 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
         parent.addView(bar, LinearLayout.LayoutParams(-1, dp(19)).apply { bottomMargin = dp(8) })
     }
 }
+
+data class Act(val label: String, val primary: Boolean = false, val enabled: Boolean = true,
+               val weight: Float = 1f, val click: () -> Unit)
