@@ -51,7 +51,7 @@ class KoreaBoard(
 ) : FrameLayout(context) {
     private val colors = ui.colors
     private val paint = Paint()
-    private val text = Paint().apply { isAntiAlias = true; isFakeBoldText = true }
+    private val text = Paint().apply { isAntiAlias = true; typeface = context.resources.getFont(R.font.galmuri_bold) }
     private val cells: Map<Cell, List<Block>> = open.mapNotNull { parse(it) }.groupBy { cellOf(it) }
     private val stickers: Map<Cell, BoardItem> = placed.entries.mapNotNull { (block, item) ->
         parse(block)?.let { cellOf(it) to item }

@@ -107,3 +107,10 @@
 - 제주는 62km 북쪽에 그린다. 홀로 떨어진 1칸 섬은 지웠다. 해안 바다 칸에 걸린 블록은 가장 가까운 땅 칸(3칸 안)으로 붙는다.
 - 구역 이름은 경계에서 가장 안쪽 칸에 둔다(경기 이름이 서울과 겹치지 않게).
 - 다시 만들기: `scripts/raster_provinces.py`.
+
+## 2026-11-13 · 한글 글꼴을 픽셀 글꼴(Galmuri11)로
+
+- 영문 표시(`FOGO PASS` 등)만 Press Start 2P였고, 한글은 매끈한 Asta Sans라 픽셀 화면과 따로 놀았다. 한글 전체를 Galmuri11(quiple, SIL OFL 1.1)로 바꿨다. 보통 400 / 굵게 700 두 파일을 `res/font/galmuri.xml` 한 가족으로 묶었다.
+- 쓰는 곳: `AtlasUi.label/text/chip/action`, 테마 기본 글꼴(대화상자), `KoreaBoard` 구역 이름·말풍선·안내(Galmuri 굵게, 가짜 볼드 제거).
+- Galmuri가 같은 크기에서 약 19% 넓어 한글 글자 크기에 `GALMURI = .86`을 곱해 기존 줄바꿈·버튼 폭을 유지한다.
+- Asta Sans(5.7MB)와 라이선스 파일은 뺐다. Galmuri 라이선스는 `assets/licenses/galmuri.txt`.

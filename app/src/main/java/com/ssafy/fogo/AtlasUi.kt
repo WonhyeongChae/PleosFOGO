@@ -36,8 +36,12 @@ class AtlasColors(val night: Boolean) {
  * [scale] enlarges every dp and text size together so screens follow the Figma proportions
  * (1700×1184 / 840×1184 frames) on wide Pleos displays instead of rendering at phone size.
  */
+/** Text-size factor for Galmuri so it fits where the previous sans did. */
+const val GALMURI = .86f
+
 class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: Boolean, val scale: Float = 1f) {
-    private val textFont by lazy { context.resources.getFont(R.font.asta_sans) }
+    /** Galmuri11 (Korean pixel font) for all Hangul text; Press Start 2P stays for Latin ticket marks. */
+    private val textFont by lazy { context.resources.getFont(R.font.galmuri) }
     private val displayFont by lazy { context.resources.getFont(R.font.press_start) }
 
     fun dp(n: Int) = (n * scale * context.resources.displayMetrics.density + .5f).toInt()
@@ -58,9 +62,10 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
     fun label(value: String, size: Float = 18f, color: Int = colors.ink, bold: Boolean = false, pixel: Boolean = false) =
         TextView(context).apply {
             text = value
-            textSize = size * scale
+            // Galmuri runs ~19% wider than the old sans, so it is set a notch smaller to keep the layouts.
+            textSize = size * scale * if (pixel) 1f else GALMURI
             setTextColor(color)
-            typeface = if (pixel) displayFont else Typeface.create(textFont, if (bold) 750 else 500, false)
+            typeface = if (pixel) displayFont else Typeface.create(textFont, if (bold) 700 else 400, false)
         }
 
     fun text(parent: LinearLayout, value: String, size: Float = 18f, color: Int = colors.ink,
@@ -79,8 +84,8 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
         Button(context).apply {
             text = value
             isAllCaps = false
-            textSize = 17f * scale
-            typeface = Typeface.create(textFont, 750, false)
+            textSize = 17f * scale * GALMURI
+            typeface = Typeface.create(textFont, 700, false)
             minHeight = dp(52)
             minimumHeight = dp(52)
             val fill = when {
