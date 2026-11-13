@@ -4,7 +4,22 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
+
+
+def find_adb():
+    """adb from ANDROID_HOME, else the SDK's default place on Windows, macOS or Linux."""
+    home = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+    if home:
+        sdk = Path(home)
+    elif os.name == "nt":
+        sdk = Path(os.environ["LOCALAPPDATA"]) / "Android/Sdk"
+    elif sys.platform == "darwin":
+        sdk = Path.home() / "Library/Android/sdk"
+    else:
+        sdk = Path.home() / "Android/Sdk"
+    return sdk / "platform-tools" / ("adb.exe" if os.name == "nt" else "adb")
 
 
 def main():
@@ -22,8 +37,7 @@ def main():
     content = root / "app/src/main/assets/cities.json"
     cities = json.loads(content.read_text(encoding="utf-8"))
     route = next(city["route"] for city in cities if city["cityId"] == args.city)
-    sdk = Path(os.environ.get("ANDROID_HOME") or Path(os.environ["LOCALAPPDATA"]) / "Android/Sdk")
-    adb = sdk / "platform-tools/adb.exe"
+    adb = find_adb()
     if args.point:
         points = [route[0] if args.point == "start" else route[-1]]
     else:

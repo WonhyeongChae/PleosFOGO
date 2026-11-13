@@ -150,14 +150,17 @@ class Profile(context: Context, preferenceName: String = "fogo_profile") {
         if (visits.isEmpty() && placements == 0 && days.none { it.startsWith(key) }) return true
         val first = month.atDay(1).toString()
         val last = month.atEndOfMonth().toString()
-        val memory = visits.maxByOrNull { visitTags(it)?.count { char -> char == '·' } ?: 0 }
+        // Representative memory: the visit with the most 상황 태그. "맑은 날" is only the no-tag default, never observed
+        // weather, so it counts as none and is left out of the line (a one-tag visit used to tie with it).
+        fun observed(city: City) = visitTags(city)?.takeUnless { it.isBlank() || it == TripTags().summary() }
+        val memory = visits.maxByOrNull { city -> observed(city)?.let { it.count { char -> char == '·' } + 1 } ?: 0 }
         val summary = JSONObject().put("visits", visits.size)
             .put("regions", visits.groupBy(City::regionId).count { (_, matches) ->
                 val firstDay = cities.filter { it.regionId == matches.first().regionId }.mapNotNull(::visitDate).minOrNull()
                 firstDay?.startsWith(key) == true
             })
         if (placements > 0 || !unknownDates) summary.put("stickers", placements)
-        if (memory != null) summary.put("memory", "${visitTags(memory)} · ${memory.spot}")
+        if (memory != null) summary.put("memory", listOfNotNull(observed(memory), memory.spot).joinToString(" · "))
         if (days.isNotEmpty()) summary.put("before", days.count { it < first }).put("after", days.count { it <= last })
         return update { table("books").put(key, summary) }
     }

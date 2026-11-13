@@ -1,6 +1,5 @@
 package com.ssafy.fogo
 
-import android.app.AlertDialog
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -74,16 +73,15 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
 
     private fun confirmTransfer() {
         val target = if (profile.car == "아반떼") "그랜저" else "아반떼"
-        host.showDialog(AlertDialog.Builder(host).setTitle("${target}로 이어받기")
-            .setMessage("이 기기의 시연 프로필을 새 차에서 이어봅니다.")
-            .setNegativeButton("취소", null).setPositiveButton("이어받기") { _, _ ->
-                if (!fogo.parked) return@setPositiveButton
+        host.showSheet("TRANSFER", "${target}로 이어받기", "이 기기의 시연 프로필을 새 차에서 이어봅니다.",
+            actions = listOf(Act("취소") {}, Act("이어받기", true, weight = 1.4f) {
+                if (!fogo.parked) return@Act
                 val before = profile.car
                 if (profile.changeCar(target)) {
                     previousCar = before
                     host.go(Page.TRANSFER)
                 } else host.message("차량 전환을 저장하지 못했어요")
-            })
+            }))
     }
 
     private fun garagePreview(parent: LinearLayout, usePreview: Boolean = false) {

@@ -266,41 +266,25 @@ class MainActivity : Activity() {
     fun selectReplay() {
         if (!fogo.canOpenReplay && !(fogo.parked && fogo.replayCity != null && !fogo.replayRunning)) return
         val sorted = fogo.cities
-        // FOGO-styled picker (ticket card, big buttons in two columns) instead of the stock list dialog.
-        val sheet = ui.column().apply {
-            background = ui.box(colors.paper, shadow = true)
-            setPadding(ui.fx(32), ui.fx(28), ui.fx(32), ui.fx(32))
-        }
-        sheet.addView(ui.label("CITY DEMO", 11f, colors.muted, pixel = true))
-        ui.text(sheet, "도시 예시 재생", 25f, bold = true)
-        ui.text(sheet, "명소를 고르면 그 도시 주행을 미리 보여 줘요", 16f, colors.muted)
-        var picker: AlertDialog? = null
-        ui.grid(sheet, sorted.map { city ->
+        // FOGO-styled picker (big buttons in two columns) instead of the stock list dialog.
+        val grid = ui.column()
+        ui.grid(grid, sorted.map { city ->
             ui.action("${city.city} · ${city.spot}", height = TAB) {
-                picker?.dismiss()
+                dialog?.dismiss()
                 journey.focus(city)
                 page = Page.JOURNEY
                 fogo.prepareReplay(city)
             }
         }, 2, gap = 8)
-        sheet.addView(ui.action("닫기", height = TAB) { picker?.dismiss() }, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = ui.fx(8)
-        })
-        val scroll = ScrollView(this).apply { addView(sheet) }
-        showDialog(AlertDialog.Builder(this).setView(scroll))
-        picker = dialog
-        dialog?.window?.apply {
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-            setLayout(ui.fx(1100).coerceAtMost(resources.displayMetrics.widthPixels), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
-        }
+        showSheet("CITY DEMO", "도시 예시 재생", "명소를 고르면 그 도시 주행을 미리 보여 줘요", grid,
+            listOf(Act("닫기") {}), width = ui.fx(1100))
     }
 
     fun explainLocation() {
         if (!fogo.parked) return
-        showDialog(AlertDialog.Builder(this).setTitle("위치 기록 시작")
-            .setMessage("차량 위치를 1km 블록으로 바꿔 기기에 저장해요. Android 위치와 Pleos 위치 접근을 허용해 주세요.")
-            .setNegativeButton("기록 없이 둘러보기", null)
-            .setPositiveButton("계속") { _, _ -> requestRecording(false) })
+        showSheet("LOCATION", "위치 기록 시작",
+            "차량 위치를 1km 블록으로 바꿔 기기에 저장해요. Android 위치와 Pleos 위치 접근을 허용해 주세요.",
+            actions = listOf(Act("기록 없이 둘러보기") {}, Act("계속", true, weight = 1.4f) { requestRecording(false) }))
     }
 
     fun requestRecording(onboarding: Boolean) {
@@ -348,11 +332,10 @@ class MainActivity : Activity() {
                 when (themeOverride) { null -> "자동"; true -> "야간"; false -> "주간" })
             if (!fogo.replayRunning) ui.button(card, "도시 예시 선택", click = ::selectReplay)
             ui.button(card, "시연 기록 초기화") {
-                showDialog(AlertDialog.Builder(this).setTitle("시연 기록 초기화")
-                    .setMessage("이 기기에서 모은 방문 기록과 수집품, 차량 선택을 초기화합니다.")
-                    .setNegativeButton("취소", null).setPositiveButton("초기화") { _, _ ->
+                showSheet("DEMO", "시연 기록 초기화", "이 기기에서 모은 방문 기록과 수집품, 차량 선택을 초기화합니다.",
+                    actions = listOf(Act("취소") {}, Act("초기화", true, weight = 1.4f) {
                         if (fogo.parked) { page = Page.INTRO; fogo.resetDemo() }
-                    })
+                    }))
             }
         }
     }
@@ -365,28 +348,48 @@ class MainActivity : Activity() {
     }
 
     private fun configureHybrid() {
-        val fields = ui.column().apply { setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0) }
-        val id = EditText(this).apply {
-            hint = "Client ID"
+        val fields = ui.column()
+        fun field(label: String, secret: Boolean) = EditText(this).apply {
+            hint = label
             isSingleLine = true
+            textSize = 18f * ui.scale
+            setTextColor(colors.ink)
+            setHintTextColor(colors.muted)
+            if (secret) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            fields.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(6) })
         }
-        val secret = EditText(this).apply {
-            hint = "Client Secret"
-            isSingleLine = true
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
-        }
-        fields.addView(id)
-        fields.addView(secret)
-        showDialog(AlertDialog.Builder(this).setTitle("Pleos 하이브리드 음성")
-            .setMessage("My Project 자격 증명은 실행 중에만 사용합니다.")
-            .setView(fields).setNegativeButton("취소", null).setPositiveButton("사용") { _, _ ->
+        val id = field("Client ID", false)
+        val secret = field("Client Secret", true)
+        showSheet("HYBRID TTS", "Pleos 하이브리드 음성", "My Project 자격 증명은 실행 중에만 사용합니다.", fields,
+            listOf(Act("취소") { secret.text.clear() }, Act("사용", true, weight = 1.4f) {
                 if (id.text.isNotBlank() && secret.text.isNotBlank()) fogo.setHybrid(id.text.toString().trim(), secret.text.toString())
                 else message("Client ID와 Client Secret을 입력하세요")
                 secret.text.clear()
-            })
+            }))
         dialog?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
+    /**
+     * FOGO-styled dialog: a paper card with the app's own type and full-size buttons. Stock dialogs come out
+     * tiny on the car display (mdpi at 2560 × 1440), too small to read or tap. Every action closes the sheet.
+     */
+    fun showSheet(tag: String, title: String, message: String? = null, body: View? = null,
+                  actions: List<Act>, width: Int = ui.fx(900)) {
+        val sheet = ui.column().apply {
+            background = ui.box(colors.paper, shadow = true)
+            setPadding(ui.fx(32), ui.fx(28), ui.fx(32), ui.fx(32))
+        }
+        sheet.addView(ui.label(tag, 11f, colors.muted, pixel = true))
+        ui.text(sheet, title, 25f, bold = true)
+        if (message != null) ui.text(sheet, message, 16f, colors.muted)
+        body?.let { sheet.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.fx(8) }) }
+        ui.actions(sheet, actions.map { act -> act.copy(click = { dialog?.dismiss(); act.click() }) }, topMargin = 16)
+        showDialog(AlertDialog.Builder(this).setView(ScrollView(this).apply { addView(sheet) }))
+        dialog?.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            setLayout(width.coerceAtMost(resources.displayMetrics.widthPixels), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
     }
 
     fun showDialog(builder: AlertDialog.Builder) {
