@@ -344,67 +344,89 @@ class KoreaBoard(
     private data class Cell(val column: Int, val row: Int)
 
     companion object {
-        private const val CELL_KM = 18.0
-        private const val LON_LEFT = 124.9
-        private const val LAT_TOP = 38.7
+        private const val CELL_KM = 10.0
+        private const val LON_LEFT = 126.0
+        private const val LAT_TOP = 38.62
         private const val KM_PER_LAT = 111.195
         /** Jeju is drawn this far north so the empty strait does not stretch the board. */
-        private const val JEJU_SHIFT_KM = 60.0
+        private const val JEJU_SHIFT_KM = 62.0
         private val kmPerLon = 111.195 * cos(Math.toRadians(36.0))
         private val JEJU_BELOW = (33.9 - 36.0) * KM_PER_LAT
         // Block x/y are km from (127°E, 36°N); see Point.block().
         private val ORIGIN_X = (LON_LEFT - 127.0) * kmPerLon
         private val ORIGIN_Y = (LAT_TOP - 36.0) * KM_PER_LAT
-        private val COLUMNS = ceil(((129.8 - LON_LEFT) * kmPerLon) / CELL_KM).toInt()
-        private val ROWS = ceil((((LAT_TOP - 33.0) * KM_PER_LAT) - JEJU_SHIFT_KM) / CELL_KM).toInt()
         private val STATES = mutableMapOf<String, ViewState>()
 
-        /** Rough South Korea outline (lon, lat), enough for an 18 km pixel board. */
-        private val OUTLINE = listOf(
-            126.1 to 37.75, 126.7 to 37.95, 127.1 to 38.3, 127.6 to 38.33, 128.0 to 38.3, 128.35 to 38.62,
-            128.6 to 38.2, 128.9 to 37.8, 129.1 to 37.5, 129.35 to 37.0, 129.45 to 36.5, 129.4 to 36.0,
-            129.55 to 35.95, 129.45 to 35.5, 129.3 to 35.3, 129.05 to 35.08, 128.6 to 34.85, 128.0 to 34.85,
-            127.6 to 34.7, 127.3 to 34.45, 126.8 to 34.3, 126.3 to 34.35, 126.25 to 34.7, 126.4 to 35.1,
-            126.45 to 35.6, 126.6 to 36.0, 126.4 to 36.5, 126.2 to 36.8, 126.55 to 37.0, 126.7 to 37.3, 126.55 to 37.6,
-        ).map { (lon, lat) -> (lon - 127.0) * kmPerLon to (lat - 36.0) * KM_PER_LAT }
+        /**
+         * 10 km tiles rasterised from the KOSTAT 2012 시·도 boundaries (southkorea-maps, provinces-geo-simple):
+         * each tile takes the province covering most of it; 인천→경기, 세종·대전→충남, 광주→전남, 대구→경북, 울산→경남.
+         * Jeju rows are moved [JEJU_SHIFT_KM] north. Regenerate with scripts/raster_provinces.py.
+         */
+        private val GRID = listOf(
+            ".....................K...........",
+            ".....................K...........",
+            "....................KKK..........",
+            "..........KKKKKKKKKKKKK..........",
+            "........GGKKKKKKKKKKKKKK.........",
+            ".......GGGGGKKKKKKKKKKKK.........",
+            "........GGGGGKKKKKKKKKKKK........",
+            "......GGGGGGGGKKKKKKKKKKK........",
+            "......GGGGGGGGKKKKKKKKKKKK.......",
+            "..GGGGGGGGGGGGKKKKKKKKKKKKK......",
+            "...GGGGGGSGGGGKKKKKKKKKKKKKK.....",
+            "....GGGSSSGGGGGGKKKKKKKKKKKK.....",
+            "...GGGGSSSSGGGGGKKKKKKKKKKKK.....",
+            ".....GGGGGGGGGGGKKKKKKKKKKKKK....",
+            "......GGGGGGGGGGKKKKKKKKKKKKKK...",
+            ".....GGGGGGGGGGGKKKBKKKKKKKKKK...",
+            "......GGGGGGGGGBBBBBBBKKKKKKKK...",
+            "....N..GGGGGGGBBBBBBBBBEKEEEEEE..",
+            "...NNNNGGGNGBBBBBBBBBBEEEEEEEEE..",
+            "..NNNNNNNNNNBBBBBBBBBBEEEEEEEEE..",
+            ".NNNNNNNNNNNBBBBBBBEEEEEEEEEEEE..",
+            "..NNNNNNNNNNBBBBBEEEEEEEEEEEEEE..",
+            "...NNNNNNNNNBBBBBEEEEEEEEEEEEEE..",
+            "...NNNNNNNNNNBBBBEEEEEEEEEEEEEE..",
+            "...NNNNNNNNNNNBBBEEEEEEEEEEEEEE..",
+            ".....NNNNNNNNNBBBEEEEEEEEEEEEEE..",
+            ".....NNNNNNNNNBBBBEEEEEEEEEEEEE..",
+            ".....NNNNNNNNNBBBBEEEEEEEEEEEEE..",
+            "......NNJJJJNNNBBEEEEEEEEEEEEEE..",
+            ".....JJJJJJJJJJJJEEEEEEEEEEEEEEE.",
+            "......JJJJJJJJJJJEEEEEEEEEEEEEEE.",
+            "......JJJJJJJJJWWWWEEEEEEEEEEEEE.",
+            ".....JJJJJJJJJJWWWWWEEEEEEEEWEE..",
+            "....JJJJJJJJJJJWWWWWWWWEEEWWWWW..",
+            "....JJJJJJJJJJJWWWWWWWWWWWWWWWW..",
+            "....JJJMJJJJJJJWWWWWWWWWWWWWWW...",
+            "...MMJMMMMJJJMWWWWWWWWWWWWWWPP...",
+            "...MMMMMMMMMMMWWWWWWWWWWWWWPP....",
+            "...MMMMMMMMMMMMWWWWWWWWWWPPPP....",
+            "MMM.MMMMMMMMMMMMWWWWWWW..PPP.....",
+            ".M.MMMMMMMMMMMMMWWWWWW.WW........",
+            "..MMMMMMMMMMMMMMWWWW.WWWW........",
+            ".M.MMMMMMMMMM.MMWWW..WWW.........",
+            "MMMMMMMMMMMMM.MM.................",
+            "M.MMMMMMM..MMM.M.................",
+            "..MMMMMMM.MMM....................",
+            ".MM.MMMM..M......................",
+            ".M..MMMMM........................",
+            ".................................",
+            ".....M...........................",
+            "....ZZZZ.........................",
+            "..ZZZZZZ.........................",
+            ".ZZZZZZZ.........................",
+            "..ZZZZ...........................",
+            ".................................",
+        )
+        private val LETTERS = mapOf(
+            'S' to "서울", 'G' to "경기", 'K' to "강원", 'B' to "충북", 'N' to "충남", 'J' to "전북",
+            'M' to "전남", 'E' to "경북", 'W' to "경남", 'P' to "부산", 'Z' to "제주",
+        )
+        private val COLUMNS = GRID.maxOf { it.length }
+        private val ROWS = GRID.size
 
-        private fun centerOf(column: Int, row: Int) =
-            ORIGIN_X + (column + .5) * CELL_KM to ORIGIN_Y - (row + .5) * CELL_KM
-
-        private fun inside(x: Double, y: Double): Boolean {
-            var result = false
-            for (i in OUTLINE.indices) {
-                val (x1, y1) = OUTLINE[i]
-                val (x2, y2) = OUTLINE[(i + 1) % OUTLINE.size]
-                if ((y1 > y) != (y2 > y) && x < (x2 - x1) * (y - y1) / (y2 - y1) + x1) result = !result
-            }
-            return result
-        }
-
-        private fun jeju(x: Double, y: Double): Boolean {
-            val dx = (x - (126.55 - 127.0) * kmPerLon) / (0.4 * kmPerLon)
-            val dy = (y - (33.38 - 36.0) * KM_PER_LAT) / (0.15 * KM_PER_LAT)
-            return dx * dx + dy * dy <= 1.0
-        }
-
-        /** 시·도 zone of a land tile from rough lon/lat boundaries; null for sea. */
-        private fun zoneFor(column: Int, row: Int): String? {
-            val (x, shifted) = centerOf(column, row)
-            val mainland = inside(x, shifted)
-            if (!mainland) return if (jeju(x, shifted - JEJU_SHIFT_KM)) "제주" else null
-            val lon = 127.0 + x / kmPerLon
-            val lat = 36.0 + shifted / KM_PER_LAT
-            return when {
-                lat >= 37.42 && lat <= 37.72 && lon in 126.8..127.2 -> "서울"
-                lat >= 37.0 -> if (lon < 127.55) "경기" else "강원"
-                lat >= 36.0 -> when { lon < 127.0 -> "충남"; lon < 127.9 || (lat >= 36.75 && lon < 128.3) -> "충북"; else -> "경북" }
-                lat >= 35.6 -> if (lon < 127.6) "전북" else "경북"
-                lat >= 35.25 -> if (lon < 127.6) (if (lat >= 35.4) "전북" else "전남") else if (lon > 128.95) "부산" else "경남"
-                else -> if (lon < 127.6) "전남" else if (lon > 128.95) "부산" else "경남"
-            }
-        }
-
-        private val ZONES: List<List<String?>> = (0 until ROWS).map { row -> (0 until COLUMNS).map { zoneFor(it, row) } }
+        private val ZONES: List<List<String?>> = GRID.map { line -> (0 until COLUMNS).map { LETTERS[line.getOrElse(it) { '.' }] } }
 
         private fun zoneAt(column: Int, row: Int) = ZONES.getOrNull(row)?.getOrNull(column)
 
@@ -415,11 +437,21 @@ class KoreaBoard(
             "부산" to 0xff8fd4ff.toInt(), "제주" to 0xffffa64d.toInt(),
         )
 
-        /** Each zone's name sits at the centre of its tiles (in tile units). */
+        /** Each zone's name sits on its most inland tile (ties broken towards the zone's centre). */
         private val LABELS: List<Triple<String, Float, Float>> = ZONE_COLORS.keys.mapNotNull { name ->
             val tiles = ZONES.flatMapIndexed { row, line -> line.mapIndexedNotNull { column, zone -> if (zone == name) column to row else null } }
-            if (tiles.isEmpty()) null
-            else Triple(name, tiles.map { it.first + .5f }.average().toFloat(), tiles.map { it.second + .5f }.average().toFloat())
+            if (tiles.isEmpty()) return@mapNotNull null
+            val cx = tiles.map { it.first }.average()
+            val cy = tiles.map { it.second }.average()
+            fun depth(column: Int, row: Int): Int {
+                for (d in 1..6) for (dy in -d..d) for (dx in -d..d) {
+                    if (maxOf(abs(dx), abs(dy)) == d && zoneAt(column + dx, row + dy) != name) return d
+                }
+                return 7
+            }
+            val best = tiles.maxWith(compareBy<Pair<Int, Int>> { minOf(depth(it.first, it.second), 3) }
+                .thenByDescending { (it.first - cx) * (it.first - cx) + (it.second - cy) * (it.second - cy) })
+            Triple(name, best.first + .5f, best.second + .5f)
         }
 
         private fun shade(color: Int, factor: Float): Int {
@@ -440,12 +472,16 @@ class KoreaBoard(
             return Block(x, y)
         }
 
+        /** Tile of a block; a block on a coastal sea tile snaps to the nearest land tile so it still shows. */
         private fun cellOf(block: Block): Cell {
             val y = if (block.y < JEJU_BELOW) block.y + .5 + JEJU_SHIFT_KM else block.y + .5
-            return Cell(
-                floor((block.x + .5 - ORIGIN_X) / CELL_KM).toInt().coerceIn(0, COLUMNS - 1),
-                floor((ORIGIN_Y - y) / CELL_KM).toInt().coerceIn(0, ROWS - 1),
-            )
+            val column = floor((block.x + .5 - ORIGIN_X) / CELL_KM).toInt().coerceIn(0, COLUMNS - 1)
+            val row = floor((ORIGIN_Y - y) / CELL_KM).toInt().coerceIn(0, ROWS - 1)
+            if (zoneAt(column, row) != null) return Cell(column, row)
+            for (d in 1..3) for (dy in -d..d) for (dx in -d..d) {
+                if (maxOf(abs(dx), abs(dy)) == d && zoneAt(column + dx, row + dy) != null) return Cell(column + dx, row + dy)
+            }
+            return Cell(column, row)
         }
 
         internal fun artKey(item: BoardItem) = when {
