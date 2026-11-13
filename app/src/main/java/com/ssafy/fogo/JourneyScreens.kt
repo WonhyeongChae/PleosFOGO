@@ -539,6 +539,11 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         background = ui.box(c.violet, c.white, shadow = true)
     }
 
+    private fun magnetArt(item: BoardItem): View = ui.label(item.name.substringBefore(' '), 17f, c.onViolet, bold = true).apply {
+        gravity = Gravity.CENTER
+        background = ui.box(c.violet, c.white, shadow = true)
+    }
+
     private fun startPlacement(preferred: String?) {
         val item = catalog.boardItems.firstOrNull { it.id == preferred && profile.owns(it.id) }
             ?: catalog.boardItems.firstOrNull { profile.owns(it.id) } ?: return
