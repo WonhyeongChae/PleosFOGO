@@ -106,10 +106,15 @@ class DashedLine(context: Context, private val color: Int, private val dash: Flo
  * The layers are split by the artwork palette used in atlas_art.json (drive_wide / drive_portrait).
  */
 class DriveSceneView(
-    context: Context, private val art: AtlasArt.Artwork, private val night: Boolean, private val fast: Boolean = false,
+    context: Context, private val art: AtlasArt.Artwork, private val night: Boolean,
+    /** 1 = gentle cruise on parked screens, 2–3 = driving / replay; 0 holds the scene still. */
+    private val speed: Float = 1f,
+    private val rain: Boolean = false,
+    /** Extra sky above the mountains, in artwork units (full-screen driving view shows the sun). */
+    private val headroom: Float = 0f,
 ) : View(context) {
     private val paint = Paint()
-    private val animate = ValueAnimator.areAnimatorsEnabled()
+    private val animate = ValueAnimator.areAnimatorsEnabled() && speed > 0f
     private val tick = object : Runnable {
         override fun run() {
             invalidate()
@@ -132,7 +137,7 @@ class DriveSceneView(
     private val carLeft = (car + wheels).minOfOrNull { it.x } ?: art.width * .3f
     private val carRight = (car + wheels).maxOfOrNull { it.x + it.w } ?: art.width * .6f
     private val carBottom = (car + wheels).maxOfOrNull { it.y + it.h } ?: roadTop + 200
-    private val sceneTop = ((back + front).minOfOrNull { it.y } ?: 0f) - 60f
+    private val sceneTop = ((back + front).minOfOrNull { it.y } ?: 0f) - 60f - headroom
     private val dashY = dashes.firstOrNull()?.y ?: (carBottom + 20)
     private val dashH = dashes.firstOrNull()?.h ?: 14f
     private val dashW = dashes.firstOrNull()?.w ?: 70f
@@ -152,7 +157,6 @@ class DriveSceneView(
         if (width == 0 || height == 0) return
         // Frame from the clock, so a re-render of the screen does not restart the motion.
         val frame = if (animate) SystemClock.uptimeMillis() / FRAME_MS else 0L
-        val speed = if (fast) 3f else 1f
         val sceneBottom = maxOf(carBottom, dashY + dashH) + 50f
         val scale = minOf(height / (sceneBottom - sceneTop), width / ((carRight - carLeft) + 240f))
         val center = (carLeft + carRight) / 2f
@@ -185,6 +189,22 @@ class DriveSceneView(
         canvas.translate(0f, bob)
         car.forEach { draw(canvas, it) }
         canvas.restore()
+        if (rain) {
+            paint.color = if (night) 0xff879eae.toInt() else 0xff5b88aa.toInt()
+            val fall = (frame * 60f * maxOf(speed, 1f)) % 400f
+            var x = left
+            var column = 0
+            while (x < right) {
+                val y = sceneTop + ((column * 137) % 400) + fall - 400f
+                var drop = y
+                while (drop < sceneBottom) {
+                    canvas.drawRect(x, drop, x + 6f, drop + 30f, paint)
+                    drop += 400f
+                }
+                x += 90f
+                column++
+            }
+        }
         canvas.restore()
     }
 

@@ -112,8 +112,9 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
                         if (item.id == selected.id) c.dark else c.border, shadow = item.id == selected.id)
                     setPadding(ui.dp(12), ui.dp(12), ui.dp(12), ui.dp(12))
                     setOnClickListener { workshopId = item.id; host.render() }
-                    addView(View(host).apply { background = ui.box(item.color) },
-                        LinearLayout.LayoutParams(-1, ui.dp(44)).apply { bottomMargin = ui.dp(8) })
+                    addView(CostumeIcon(host, host.art, item.slot, item.color, c.night).apply {
+                        background = ui.box(c.paper)
+                    }, LinearLayout.LayoutParams(-1, ui.dp(84)).apply { bottomMargin = ui.dp(8) })
                     addView(ui.label(item.name, 19f, bold = true).apply { gravity = android.view.Gravity.CENTER })
                     addView(ui.label(costText(item), 14f, c.muted).apply { gravity = android.view.Gravity.CENTER })
                     val status = availability(item)
@@ -183,8 +184,10 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
                     background = ui.box(if (chosen) c.fog else c.paper, c.border, shadow = chosen)
                     setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10))
                     if (owned) setOnClickListener { preview(item?.id) }
-                    addView(View(host).apply { background = ui.box(item?.color ?: c.navy) },
-                        LinearLayout.LayoutParams(-1, ui.dp(64)).apply { bottomMargin = ui.dp(8) })
+                    addView((if (item == null) ui.label("없음", 16f, c.muted).apply { gravity = Gravity.CENTER }
+                        else CostumeIcon(host, host.art, item.slot, item.color, c.night)).apply {
+                        background = ui.box(c.paper)
+                    }, LinearLayout.LayoutParams(-1, ui.dp(84)).apply { bottomMargin = ui.dp(8) })
                     addView(ui.label(name + suffix, 16f, bold = chosen).apply { gravity = android.view.Gravity.CENTER })
                 }
             }, if (ui.wide) 3 else 2)

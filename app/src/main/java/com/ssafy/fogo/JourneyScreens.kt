@@ -140,9 +140,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             counts.addView(ui.chip("블록 ${profile.blocks.size}", c.paper, 13f, pixel = true))
             counts.addView(ui.chip("오늘 +${profile.newBlocksToday()}", c.lime, 13f, pixel = true),
                 LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
-            panel.addView(KoreaBoard(host, ui, host.art, profile.blocks, emptyMap()).apply {
+            panel.addView(KoreaBoard(host, ui, host.art, profile.blocks, emptyMap(), key = "atlas").apply {
                 contentDescription = "안개 지도"
-            }, LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 470 else 360)))
+            }, LinearLayout.LayoutParams(-1, screenPart(if (ui.wide) .5f else .4f)))
             // Floating bar at the bottom of the map, like the Figma "nearby" card.
             val bar = ui.column().apply {
                 background = ui.box(c.paper, shadow = true)
@@ -272,7 +272,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             if (profile.visited(matched)) ui.text(preview, "첫 도착 보상 수령 완료", bold = true)
         }
         // Animated while parked; runs faster during the replay so the trip reads as "on the way".
-        preview.addView(DriveSceneView(host, host.art["drive_wide"], c.night, fast = fogo.replayRunning),
+        preview.addView(DriveSceneView(host, host.art["drive_wide"], c.night, speed = if (fogo.replayRunning) 3f else 1f),
             LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 300 else 240)))
         if (fogo.replayCity == null) {
             ui.button(body, if (fogo.recording) "위치 기록 중지" else "위치 기록 시작", true) {
@@ -492,11 +492,15 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         // Placement zooms in around the spot just reached (kept still while picking); the board shows it all.
         val zoom = if (!editing) null else spot.point.block()
         val board = KoreaBoard(host, ui, host.art, profile.blocks, placed,
-            pendingCell.takeIf { editing }, owned[itemId].takeIf { editing }, pick, zoom).apply {
+            pendingCell.takeIf { editing }, owned[itemId].takeIf { editing }, pick, zoom,
+            key = if (editing) "place:${spot.spotId}" else "board").apply {
             contentDescription = if (editing) null else "내 지도판"
         }
-        panel.addView(board, LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 560 else 520)))
+        panel.addView(board, LinearLayout.LayoutParams(-1, screenPart(if (ui.wide) .66f else .5f)))
     }
+
+    /** Height as a share of the screen, so maps fill the page whatever the UI scale. */
+    private fun screenPart(fraction: Float) = (host.resources.displayMetrics.heightPixels * fraction).toInt()
 
     private fun stickerArt(item: BoardItem): View {
         val key = when {
