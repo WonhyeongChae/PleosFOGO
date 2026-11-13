@@ -61,8 +61,9 @@ class KoreaBoard(
     }.toMap()
     private val pendingCell = pending?.let { parse(it) }?.let { cellOf(it) }
     private val view: ViewState = STATES.getOrPut(key) {
-        focus?.let { cellOf(it) }?.let { ViewState(FOCUS_ZOOM, it.column + .5f, it.row + .5f) }
-            ?: ViewState(0f, COLUMNS / 2f, MAINLAND_ROWS / 2f) // zoom 0: fit the mainland once the size is known
+        // Zoom is settled once the size is known: -1 = focus at Figma A3 tile size, 0 = mainland fills the board.
+        focus?.let { cellOf(it) }?.let { ViewState(-1f, it.column + .5f, it.row + .5f) }
+            ?: ViewState(0f, LAND_CENTER, MAINLAND_ROWS / 2f)
     }
     private var base = 0f
     private val cell get() = base * view.zoom
@@ -133,7 +134,11 @@ class KoreaBoard(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         base = minOf(w / COLUMNS.toFloat(), h / ROWS.toFloat())
-        if (view.zoom == 0f && base > 0f) view.zoom = (h / MAINLAND_ROWS.toFloat() / base).coerceIn(1f, MAX_ZOOM)
+        if (base > 0f && view.zoom == 0f) {
+            // Figma A2: the mainland fills the board across as well as down (tiles ≈ 44 px).
+            view.zoom = maxOf(h / MAINLAND_ROWS.toFloat(), w / LAND_COLUMNS.toFloat()).div(base).coerceIn(1f, MAX_ZOOM)
+        }
+        if (base > 0f && view.zoom < 0f) view.zoom = (ui.fx(FOCUS_TILE) / base).coerceIn(1f, MAX_ZOOM)
         clampCenter()
     }
 
@@ -273,7 +278,7 @@ class KoreaBoard(
     }
 
     private fun sticker(canvas: Canvas, tile: Cell, item: BoardItem) {
-        val size = (cell * 1.7f).coerceIn(ui.dp(26).toFloat(), ui.dp(70).toFloat())
+        val size = (cell * 1.25f).coerceIn(ui.dp(26).toFloat(), ui.fx(110).toFloat())
         val cx = originX + (tile.column + .5f) * cell
         val cy = originY + (tile.row + .5f) * cell
         if (cx < -size || cy < -size || cx > width + size || cy > height + size) return
@@ -353,8 +358,9 @@ class KoreaBoard(
         private val ORIGIN_X = (LON_LEFT - 127.0) * kmPerLon
         private val ORIGIN_Y = (LAT_TOP - 36.0) * KM_PER_LAT
         private val STATES = mutableMapOf<String, ViewState>()
-        private const val MAX_ZOOM = 4f
-        private const val FOCUS_ZOOM = 2f
+        private const val MAX_ZOOM = 5f
+        /** Tile size when placing around a spot (Figma A3 ≈ 87 px, a dozen tiles across). */
+        private const val FOCUS_TILE = 88
         private const val LABEL_ZOOM = 1.8f
         private const val METRO_LABEL_ZOOM = 2.8f
 
@@ -408,6 +414,10 @@ class KoreaBoard(
         private val ROWS = GRID.size
         /** Rows down to the south coast; the first view fits these so the mainland fills the board (Jeju below). */
         private val MAINLAND_ROWS = GRID.indexOfLast { line -> line.any { it != '.' && it != 'Z' } } + 1
+        private val LAND_LEFT = GRID.take(MAINLAND_ROWS).minOf { line -> line.indexOfFirst { it != '.' }.let { if (it < 0) COLUMNS else it } }
+        private val LAND_RIGHT = GRID.take(MAINLAND_ROWS).maxOf { line -> line.indexOfLast { it != '.' } }
+        private val LAND_COLUMNS = LAND_RIGHT - LAND_LEFT + 1
+        private val LAND_CENTER = (LAND_LEFT + LAND_RIGHT + 1) / 2f
 
         private val ZONES: List<List<String?>> = GRID.map { line -> (0 until COLUMNS).map { LETTERS[line.getOrElse(it) { '.' }] } }
 

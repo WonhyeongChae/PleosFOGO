@@ -17,7 +17,7 @@ import android.widget.Toast
 
 enum class Page(val title: String) {
     INTRO("FOGO"), CONSENT("위치 기록 동의"), MASCOT("같이 달릴 친구"), ATLAS("아틀라스"),
-    JOURNEY("목적지 미리보기"), ARRIVAL("도착 탑승권"), BOARD("내 지도판"), PLACE("스티커·자석 붙이기"),
+    JOURNEY("목적지 미리보기"), ARRIVAL("도착 탑승권"), BOARD("아틀라스"), PLACE("스티커·자석 붙이기"),
     REGION("시·도 상세"), GARAGE("차고"), WORKSHOP("공방"), DRESS("입히기"),
     RECAP("리캡"), BOOK("월간 티켓북"), TRANSFER("새 차로 이어가기"), SETTINGS("시연 설정"),
 }
@@ -212,7 +212,8 @@ class MainActivity : Activity() {
             setPadding(ui.dp(22), ui.dp(8), ui.dp(20), ui.dp(8))
         }
         parent.addView(bar, LinearLayout.LayoutParams(-1, -2))
-        if (page !in mainTabs && page != Page.INTRO) {
+        // 지도판 is the second tab of 아틀라스 (Figma A2), so no back arrow there.
+        if (page !in mainTabs && page != Page.INTRO && page != Page.BOARD) {
             val back = ui.action("←") { go(parentPage()) }.apply { contentDescription = "뒤로" }
             bar.addView(back, LinearLayout.LayoutParams(ui.dp(55), -2).apply { marginEnd = ui.dp(10) })
         }
@@ -265,12 +266,33 @@ class MainActivity : Activity() {
     fun selectReplay() {
         if (!fogo.canOpenReplay && !(fogo.parked && fogo.replayCity != null && !fogo.replayRunning)) return
         val sorted = fogo.cities
-        showDialog(AlertDialog.Builder(this).setTitle("도시 예시 재생")
-            .setItems(sorted.map { "${it.city} · ${it.spot}" }.toTypedArray()) { _, index ->
-                journey.focus(sorted[index])
+        // FOGO-styled picker (ticket card, big buttons in two columns) instead of the stock list dialog.
+        val sheet = ui.column().apply {
+            background = ui.box(colors.paper, shadow = true)
+            setPadding(ui.fx(32), ui.fx(28), ui.fx(32), ui.fx(32))
+        }
+        sheet.addView(ui.label("CITY DEMO", 11f, colors.muted, pixel = true))
+        ui.text(sheet, "도시 예시 재생", 25f, bold = true)
+        ui.text(sheet, "명소를 고르면 그 도시 주행을 미리 보여 줘요", 16f, colors.muted)
+        var picker: AlertDialog? = null
+        ui.grid(sheet, sorted.map { city ->
+            ui.action("${city.city} · ${city.spot}", height = TAB) {
+                picker?.dismiss()
+                journey.focus(city)
                 page = Page.JOURNEY
-                fogo.prepareReplay(sorted[index])
-            }.setNegativeButton("닫기", null))
+                fogo.prepareReplay(city)
+            }
+        }, 2, gap = 8)
+        sheet.addView(ui.action("닫기", height = TAB) { picker?.dismiss() }, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = ui.fx(8)
+        })
+        val scroll = ScrollView(this).apply { addView(sheet) }
+        showDialog(AlertDialog.Builder(this).setView(scroll))
+        picker = dialog
+        dialog?.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            setLayout(ui.fx(1100).coerceAtMost(resources.displayMetrics.widthPixels), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
     }
 
     fun explainLocation() {

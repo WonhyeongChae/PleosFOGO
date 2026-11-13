@@ -74,14 +74,48 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
 
     fun label(value: String, size: Float = 18f, color: Int = colors.ink, bold: Boolean = false, pixel: Boolean = false) =
         TextView(context).apply {
-            text = value
+            text = keepAll(value)
             // Galmuri runs ~19% wider than the old sans, so it is set a notch smaller to keep the layouts.
             // Press Start 2P has no Hangul; a "pixel" label with Korean in it uses bold Galmuri instead of a system fallback.
             val latin = pixel && value.none { it in '\uAC00'..'\uD7A3' }
             textSize = scale * if (latin) size else maxOf(size * GALMURI, MIN_TEXT)
             setTextColor(color)
             typeface = if (latin) displayFont else Typeface.create(textFont, if (bold || pixel) 700 else 400, false)
+            keepWords(this)
         }
+
+    /**
+     * Korean wraps between any two syllables by default ("양떼목 / 장"); break only between words instead.
+     * Phrase breaking needs Android 13+; older systems keep the default.
+     */
+    fun keepWords(view: TextView) {
+        view.textLocale = java.util.Locale.KOREAN
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            view.lineBreakWordStyle = android.graphics.text.LineBreakConfig.LINE_BREAK_WORD_STYLE_PHRASE
+        }
+    }
+
+    /**
+     * Glues the syllables of each word with WORD JOINER (U+2060, invisible) so Korean only wraps at spaces,
+     * like CSS word-break: keep-all. Works on every Android version; tests strip U+2060 before matching.
+     */
+    fun keepAll(value: String): String {
+        if (value.none { it in '\uAC00'..'\uD7A3' }) return value
+        val out = StringBuilder(value.length * 2)
+        value.forEachIndexed { index, char ->
+            if (index > 0 && !char.isWhitespace() && !value[index - 1].isWhitespace()) out.append('\u2060')
+            out.append(char)
+        }
+        return out.toString()
+    }
+
+    /** Dark or white text, whichever reads on [fill] (night paper is dark). */
+    fun readableOn(fill: Int): Int {
+        val r = fill shr 16 and 0xff
+        val g = fill shr 8 and 0xff
+        val b = fill and 0xff
+        return if (r * 299 + g * 587 + b * 114 > 140_000) colors.dark else 0xffffffff.toInt()
+    }
 
     fun text(parent: LinearLayout, value: String, size: Float = 18f, color: Int = colors.ink,
              bold: Boolean = false, pixel: Boolean = false) =
@@ -99,7 +133,7 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
     fun action(value: String, selected: Boolean = false, primary: Boolean = false, enabled: Boolean = true,
                height: Int = BUTTON, fill: Int? = null, click: () -> Unit) =
         Button(context).apply {
-            text = value
+            text = keepAll(value)
             isAllCaps = false
             textSize = scale * maxOf((if (height < BUTTON) 16f else 17f) * GALMURI, MIN_TEXT)
             typeface = Typeface.create(textFont, 700, false)
@@ -113,6 +147,8 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
             setTextColor(if (primary || face == colors.yellow) colors.dark else if (selected || face == colors.navy) colors.white else colors.ink)
             background = RippleDrawable(ColorStateList.valueOf(0x335b6270), box(face, shadow = primary || fill != null), null)
             setPadding(dp(13), dp(8), dp(13), dp(8))
+            maxLines = 2
+            keepWords(this)
             isEnabled = enabled
             alpha = if (enabled) 1f else .58f
             setOnClickListener { click() }
@@ -134,8 +170,9 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
     }
 
     /** Bordered chip, the small tag used for counts, rewards and statuses in the Figma screens. */
-    fun chip(value: String, fill: Int, size: Float = 16f, color: Int = colors.dark, pixel: Boolean = false) =
-        label(value, size, color, bold = !pixel, pixel = pixel).apply {
+    fun chip(value: String, fill: Int, size: Float = 16f, color: Int? = null, pixel: Boolean = false) =
+        label(value, size, color ?: readableOn(fill), bold = !pixel, pixel = pixel).apply {
+            maxLines = 1
             background = box(fill, colors.dark)
             gravity = Gravity.CENTER
             minHeight = fx(CHIP)
