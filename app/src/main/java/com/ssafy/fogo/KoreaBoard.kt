@@ -23,7 +23,7 @@ import kotlin.math.hypot
  * - Land is split into 시·도 zones: every land tile carries a faint zone tint, zones are separated by
  *   border lines and named, and the coast has an outline. A tile with an opened 1 km block shows the
  *   zone colour with a pixel bevel; fog tiles keep a dot.
- * - Pinch, drag and the +/− buttons zoom and pan. The zoom of each [key] survives re-renders.
+ * - Pinch, drag and the +/- buttons zoom and pan. The zoom of each [key] survives re-renders.
  * - Stickers / magnets sit on the tile that holds their block as tilted tiles.
  * - When [pick] is set (placement) every tappable opened tile gets a small view ("열린 칸") so it works
  *   with touch, accessibility and UI tests; picking a tile picks its first free opened block, so
@@ -98,11 +98,12 @@ class KoreaBoard(
             }
         }
         zoomIn = zoomButton("+", "지도 확대") { zoomBy(1.6f) }
-        zoomOut = zoomButton("−", "지도 축소") { zoomBy(1 / 1.6f) }
+        zoomOut = zoomButton("-", "지도 축소") { zoomBy(1 / 1.6f) }
     }
 
     private fun zoomButton(label: String, description: String, click: () -> Unit) =
-        ui.label(label, 22f, colors.ink, bold = true).apply {
+        // Press Start 2P: Galmuri has no U+2212 and its own +/- sit off-centre in a square button.
+        ui.label(label, 18f, colors.ink, pixel = true).apply {
             gravity = android.view.Gravity.CENTER
             background = ui.box(colors.paper, shadow = true)
             contentDescription = description
@@ -267,17 +268,23 @@ class KoreaBoard(
                 paint.style = Paint.Style.FILL
             }
         }
-        // Zone names at each zone's centre.
-        text.textSize = (cell * .62f).coerceIn(ui.dp(10).toFloat(), ui.dp(22).toFloat())
-        LABELS.forEach { (name, column, row) ->
-            val cx = originX + column * cell
-            val cy = originY + row * cell
-            if (cx < 0 || cy < 0 || cx > width || cy > height) return@forEach
-            val w = text.measureText(name)
-            paint.color = if (colors.night) 0xcc0b1426.toInt() else 0xccffffff.toInt()
-            canvas.drawRect(cx - w / 2 - 4, cy - text.textSize, cx + w / 2 + 4, cy + text.textSize * .25f, paint)
-            text.color = colors.ink
-            canvas.drawText(name, cx - w / 2, cy, text)
+        // 시·도 names only once zoomed in (도 from 2×, 특별·광역시 from 3×): small text with a paper halo, no box.
+        if (view.zoom >= 2f) {
+            text.textSize = ui.dp(MIN_TEXT.toInt()).toFloat()
+            LABELS.forEach { (name, column, row) ->
+                if (name in METROS && view.zoom < 3f) return@forEach
+                val cx = originX + column * cell
+                val cy = originY + row * cell + text.textSize * .35f
+                val w = text.measureText(name)
+                if (cx + w < 0 || cy < 0 || cx - w > width || cy - text.textSize > height) return@forEach
+                text.style = Paint.Style.STROKE
+                text.strokeWidth = text.textSize * .22f
+                text.color = colors.paper
+                canvas.drawText(name, cx - w / 2, cy, text)
+                text.style = Paint.Style.FILL
+                text.color = colors.ink
+                canvas.drawText(name, cx - w / 2, cy, text)
+            }
         }
         stickers.forEach { (tile, item) -> sticker(canvas, tile, item) }
         if (preview != null && pendingCell != null && pendingCell !in stickers) {
@@ -326,10 +333,10 @@ class KoreaBoard(
 
     private fun bubble(canvas: Canvas, tile: Cell) {
         val label = "여기에 붙여요"
-        text.textSize = ui.dp(15).toFloat()
+        text.textSize = ui.dp(MIN_TEXT.toInt()).toFloat()
         text.color = colors.dark
         val w = text.measureText(label) + ui.dp(16)
-        val h = ui.dp(28).toFloat()
+        val h = ui.dp(30).toFloat()
         val cx = originX + (tile.column + .5f) * cell
         val y = originY + (tile.row + 1f) * cell + ui.dp(18)
         paint.color = colors.dark
@@ -341,11 +348,11 @@ class KoreaBoard(
 
     private fun hint(canvas: Canvas) {
         val label = "안개 칸은 아직 안 간 곳이라 붙일 수 없어요"
-        text.textSize = ui.dp(13).toFloat()
+        text.textSize = ui.dp(MIN_TEXT.toInt()).toFloat()
         text.color = 0xffffffff.toInt()
         val pad = ui.dp(12).toFloat()
         val w = text.measureText(label) + pad * 2
-        val h = ui.dp(32).toFloat()
+        val h = ui.dp(34).toFloat()
         val y = height - h - pad
         paint.color = 0xe644464e.toInt()
         canvas.drawRoundRect(RectF(pad, y, pad + w, y + h), h / 2, h / 2, paint)
@@ -371,7 +378,7 @@ class KoreaBoard(
 
         /**
          * 10 km tiles rasterised from the KOSTAT 2012 시·도 boundaries (southkorea-maps, provinces-geo-simple):
-         * each tile takes the province covering most of it; 인천→경기, 세종·대전→충남, 광주→전남, 대구→경북, 울산→경남.
+         * each tile takes the 시·도 covering most of it (특별·광역시 win at 25% so they keep a shape); all 17 시·도.
          * Jeju rows are moved [JEJU_SHIFT_KM] north. Regenerate with scripts/raster_provinces.py.
          */
         private val GRID = listOf(
@@ -384,11 +391,11 @@ class KoreaBoard(
             "........GGGGGKKKKKKKKKKKK........",
             "......GGGGGGGGKKKKKKKKKKK........",
             "......GGGGGGGGKKKKKKKKKKKK.......",
-            "..GGGGGGGGGGGGKKKKKKKKKKKKK......",
-            "...GGGGGGSGGGGKKKKKKKKKKKKKK.....",
-            "....GGGSSSGGGGGGKKKKKKKKKKKK.....",
-            "...GGGGSSSSGGGGGKKKKKKKKKKKK.....",
-            ".....GGGGGGGGGGGKKKKKKKKKKKKK....",
+            "..IIIGGGGGGGGGKKKKKKKKKKKKK......",
+            "...IIGGGGSGGGGKKKKKKKKKKKKKK.....",
+            "....IIISSSGGGGGGKKKKKKKKKKKK.....",
+            "...IIIISSSSGGGGGKKKKKKKKKKKK.....",
+            ".....IIGGGGGGGGGKKKKKKKKKKKKK....",
             "......GGGGGGGGGGKKKKKKKKKKKKKK...",
             ".....GGGGGGGGGGGKKKBKKKKKKKKKK...",
             "......GGGGGGGGGBBBBBBBKKKKKKKK...",
@@ -396,25 +403,25 @@ class KoreaBoard(
             "...NNNNGGGNGBBBBBBBBBBEEEEEEEEE..",
             "..NNNNNNNNNNBBBBBBBBBBEEEEEEEEE..",
             ".NNNNNNNNNNNBBBBBBBEEEEEEEEEEEE..",
-            "..NNNNNNNNNNBBBBBEEEEEEEEEEEEEE..",
-            "...NNNNNNNNNBBBBBEEEEEEEEEEEEEE..",
-            "...NNNNNNNNNNBBBBEEEEEEEEEEEEEE..",
-            "...NNNNNNNNNNNBBBEEEEEEEEEEEEEE..",
-            ".....NNNNNNNNNBBBEEEEEEEEEEEEEE..",
-            ".....NNNNNNNNNBBBBEEEEEEEEEEEEE..",
+            "..NNNNNNNNXXBBBBBEEEEEEEEEEEEEE..",
+            "...NNNNNNNXXBBBBBEEEEEEEEEEEEEE..",
+            "...NNNNNNNXXXBBBBEEEEEEEEEEEEEE..",
+            "...NNNNNNNNXDDBBBEEEEEEEEEEEEEE..",
+            ".....NNNNNNDDDBBBEEEEEEEEEEEEEE..",
+            ".....NNNNNNDDDBBBBEEEEEEEEEEEEE..",
             ".....NNNNNNNNNBBBBEEEEEEEEEEEEE..",
             "......NNJJJJNNNBBEEEEEEEEEEEEEE..",
-            ".....JJJJJJJJJJJJEEEEEEEEEEEEEEE.",
-            "......JJJJJJJJJJJEEEEEEEEEEEEEEE.",
-            "......JJJJJJJJJWWWWEEEEEEEEEEEEE.",
-            ".....JJJJJJJJJJWWWWWEEEEEEEEWEE..",
-            "....JJJJJJJJJJJWWWWWWWWEEEWWWWW..",
-            "....JJJJJJJJJJJWWWWWWWWWWWWWWWW..",
-            "....JJJMJJJJJJJWWWWWWWWWWWWWWW...",
+            ".....JJJJJJJJJJJJEEEEEETTEEEEEEE.",
+            "......JJJJJJJJJJJEEEETTTTEEEEEEE.",
+            "......JJJJJJJJJWWWWEETTTTEEEEEEE.",
+            ".....JJJJJJJJJJWWWWWETTEEEEEUEE..",
+            "....JJJJJJJJJJJWWWWWWWWEEEWUUUU..",
+            "....JJJJJJJJJJJWWWWWWWWWWWWUUUU..",
+            "....JJJMJJJJJJJWWWWWWWWWWWWWUU...",
             "...MMJMMMMJJJMWWWWWWWWWWWWWWPP...",
-            "...MMMMMMMMMMMWWWWWWWWWWWWWPP....",
-            "...MMMMMMMMMMMMWWWWWWWWWWPPPP....",
-            "MMM.MMMMMMMMMMMMWWWWWWW..PPP.....",
+            "...MMMMQQMMMMMWWWWWWWWWWWWWPP....",
+            "...MMMQQQMMMMMMWWWWWWWWWWPPPP....",
+            "MMM.MMMQQMMMMMMMWWWWWWW..PPP.....",
             ".M.MMMMMMMMMMMMMWWWWWW.WW........",
             "..MMMMMMMMMMMMMMWWWW.WWWW........",
             ".M.MMMMMMMMMM.MMWWW..WWW.........",
@@ -432,9 +439,12 @@ class KoreaBoard(
             ".................................",
         )
         private val LETTERS = mapOf(
-            'S' to "서울", 'G' to "경기", 'K' to "강원", 'B' to "충북", 'N' to "충남", 'J' to "전북",
-            'M' to "전남", 'E' to "경북", 'W' to "경남", 'P' to "부산", 'Z' to "제주",
+            'S' to "서울", 'I' to "인천", 'G' to "경기", 'K' to "강원", 'X' to "세종", 'D' to "대전",
+            'B' to "충북", 'N' to "충남", 'Q' to "광주", 'J' to "전북", 'M' to "전남", 'T' to "대구",
+            'E' to "경북", 'U' to "울산", 'W' to "경남", 'P' to "부산", 'Z' to "제주",
         )
+        /** 특별·광역시: coloured as a shade of the province around them, named only when zoomed in further. */
+        private val METROS = setOf("서울", "인천", "세종", "대전", "광주", "대구", "울산", "부산")
         private val COLUMNS = GRID.maxOf { it.length }
         private val ROWS = GRID.size
 
@@ -443,10 +453,15 @@ class KoreaBoard(
         private fun zoneAt(column: Int, row: Int) = ZONES.getOrNull(row)?.getOrNull(column)
 
         private val ZONE_COLORS = mapOf(
-            "서울" to 0xffb69cff.toInt(), "경기" to 0xff7fd890.toInt(), "강원" to 0xff6ec6ff.toInt(),
-            "충남" to 0xffffb347.toInt(), "충북" to 0xffffe08a.toInt(), "경북" to 0xffff9f8a.toInt(),
-            "전북" to 0xff9ee6df.toInt(), "전남" to 0xffb4e197.toInt(), "경남" to 0xffffc46b.toInt(),
-            "부산" to 0xff8fd4ff.toInt(), "제주" to 0xffffa64d.toInt(),
+            "경기" to 0xff7fd890.toInt(), "서울" to 0xff4fb86a.toInt(), "인천" to 0xffb6ecc1.toInt(),
+            "강원" to 0xff6ec6ff.toInt(),
+            "충남" to 0xffffb347.toInt(), "대전" to 0xffe58e1f.toInt(), "세종" to 0xffffd49c.toInt(),
+            "충북" to 0xffffe08a.toInt(),
+            "경북" to 0xffff9f8a.toInt(), "대구" to 0xffeb6f55.toInt(),
+            "전북" to 0xff9ee6df.toInt(),
+            "전남" to 0xffb4e197.toInt(), "광주" to 0xff82c45f.toInt(),
+            "경남" to 0xffffc46b.toInt(), "울산" to 0xffe9a23a.toInt(), "부산" to 0xffffe0a6.toInt(),
+            "제주" to 0xffffa64d.toInt(),
         )
 
         /** Each zone's name sits on its most inland tile (ties broken towards the zone's centre). */

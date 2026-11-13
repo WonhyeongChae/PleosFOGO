@@ -38,6 +38,12 @@ class AtlasColors(val night: Boolean) {
  */
 /** Text-size factor for Galmuri so it fits where the previous sans did. */
 const val GALMURI = .9f
+/**
+ * Smallest Hangul size (sp before [AtlasUi.scale]). Galmuri is a pixel face, so it needs more size than a sans
+ * to read at arm's length: on the 1682 px Pleos screen (scale ≈ 1.7) this is ≈ 27 px, glyphs ≈ 25 px tall.
+ * Press Start 2P (Latin caps) keeps its own sizes.
+ */
+const val MIN_TEXT = 16f
 
 class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: Boolean, val scale: Float = 1f) {
     /** Galmuri11 (Korean pixel font) for all Hangul text; Press Start 2P stays for Latin ticket marks. */
@@ -63,9 +69,11 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
         TextView(context).apply {
             text = value
             // Galmuri runs ~19% wider than the old sans, so it is set a notch smaller to keep the layouts.
-            textSize = size * scale * if (pixel) 1f else GALMURI
+            // Press Start 2P has no Hangul; a "pixel" label with Korean in it uses bold Galmuri instead of a system fallback.
+            val latin = pixel && value.none { it in '\uAC00'..'\uD7A3' }
+            textSize = scale * if (latin) size else maxOf(size * GALMURI, MIN_TEXT)
             setTextColor(color)
-            typeface = if (pixel) displayFont else Typeface.create(textFont, if (bold) 700 else 400, false)
+            typeface = if (latin) displayFont else Typeface.create(textFont, if (bold || pixel) 700 else 400, false)
         }
 
     fun text(parent: LinearLayout, value: String, size: Float = 18f, color: Int = colors.ink,
@@ -84,7 +92,7 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
         Button(context).apply {
             text = value
             isAllCaps = false
-            textSize = 17f * scale * GALMURI
+            textSize = scale * maxOf(17f * GALMURI, MIN_TEXT)
             typeface = Typeface.create(textFont, 700, false)
             minHeight = dp(52)
             minimumHeight = dp(52)
