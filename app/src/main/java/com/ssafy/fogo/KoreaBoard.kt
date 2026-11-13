@@ -51,7 +51,7 @@ class KoreaBoard(
 ) : FrameLayout(context) {
     private val colors = ui.colors
     private val paint = Paint()
-    private val text = Paint().apply { isAntiAlias = true; isFakeBoldText = true }
+    private val text = Paint().apply { isAntiAlias = true; typeface = context.resources.getFont(R.font.galmuri_bold) }
     private val cells: Map<Cell, List<Block>> = open.mapNotNull { parse(it) }.groupBy { cellOf(it) }
     private val stickers: Map<Cell, BoardItem> = placed.entries.mapNotNull { (block, item) ->
         parse(block)?.let { cellOf(it) to item }
@@ -191,7 +191,7 @@ class KoreaBoard(
         val sea = if (colors.night) 0xff15263a.toInt() else 0xffcfe4f5.toInt()
         val wave = if (colors.night) 0xff1d334b.toInt() else 0xffbdd7ee.toInt()
         val coast = if (colors.night) 0xff7d8fa6.toInt() else 0xff5b7a99.toInt()
-        val border = if (colors.night) 0xffb7c2d3.toInt() else 0xff0b1426.toInt()
+        val border = if (colors.night) 0x99b7c2d3.toInt() else 0x8c0b1426.toInt()
         canvas.drawColor(sea)
         val gap = maxOf(1f, cell / 16f)
         val bevel = maxOf(1f, cell / 7f)
@@ -236,11 +236,23 @@ class KoreaBoard(
                 }
             }
             // Coast outline and 시·도 borders on the tile edges.
-            val line = maxOf(1.5f, cell / 10f)
+            // Coast a little heavier than the 시·도 lines; province borders are hairlines so the colours lead.
+            val line = maxOf(1.5f, cell / 14f)
+            val thin = maxOf(1f, cell / 28f)
             fun edge(neighbour: String?, x1: Float, y1: Float, x2: Float, y2: Float) {
                 when {
                     neighbour == null -> { paint.color = coast; canvas.drawRect(x1, y1, x2, y2, paint) }
-                    neighbour != zone -> { paint.color = border; canvas.drawRect(x1, y1, x2, y2, paint) }
+                    neighbour != zone -> {
+                        paint.color = border
+                        // Shrink the band across its thin side to the hairline width.
+                        if (x2 - x1 < y2 - y1) {
+                            val mid = (x1 + x2) / 2
+                            canvas.drawRect(mid - thin / 2, y1, mid + thin / 2, y2, paint)
+                        } else {
+                            val mid = (y1 + y2) / 2
+                            canvas.drawRect(x1, mid - thin / 2, x2, mid + thin / 2, paint)
+                        }
+                    }
                 }
             }
             edge(zoneAt(column, row - 1), x, y - line / 2, x + cell, y + line / 2)
