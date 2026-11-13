@@ -20,7 +20,7 @@ data class TicketBook(
 class Profile(context: Context, preferenceName: String = "fogo_profile") {
     private val storage = context.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
     private val seed = JSONObject(context.assets.open("demo_profile.json").bufferedReader().use { it.readText() })
-    private var record = storage.getString("record", null)?.let(::JSONObject) ?: JSONObject(seed.toString())
+    private var record = load()
     private val hadRecord get() = storage.contains("record")
 
     private fun entries(key: String): JSONObject = record.optJSONObject(key) ?: JSONObject()
@@ -163,6 +163,18 @@ class Profile(context: Context, preferenceName: String = "fogo_profile") {
         if (memory != null) summary.put("memory", listOfNotNull(observed(memory), memory.spot).joinToString(" · "))
         if (days.isNotEmpty()) summary.put("before", days.count { it < first }).put("after", days.count { it <= last })
         return update { table("books").put(key, summary) }
+    }
+
+    /**
+     * The saved record, or the seed. Profile is built in FogoApplication.onCreate, so an unreadable record used to
+     * crash the app on every launch until its data was cleared: keep the broken text aside and start from the seed.
+     */
+    private fun load(): JSONObject {
+        val saved = storage.getString("record", null) ?: return JSONObject(seed.toString())
+        return runCatching { JSONObject(saved) }.getOrElse {
+            storage.edit().putString("record_unreadable", saved).apply()
+            JSONObject(seed.toString())
+        }
     }
 
     fun reset(): Boolean {

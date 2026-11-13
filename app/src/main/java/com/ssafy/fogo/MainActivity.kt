@@ -44,6 +44,8 @@ class MainActivity : Activity() {
     var entering = false
         private set
     private val themePreferences by lazy { getSharedPreferences("fogo_appearance", MODE_PRIVATE) }
+    /** Whether location was ever requested, to tell a first request from a "다시 묻지 않음" denial. */
+    private val permissionPreferences by lazy { getSharedPreferences("fogo_permissions", MODE_PRIVATE) }
     private var themeOverride: Boolean? = null
     private val mainTabs = listOf(Page.ATLAS, Page.GARAGE, Page.RECAP, Page.SETTINGS)
 
@@ -282,8 +284,15 @@ class MainActivity : Activity() {
 
     fun explainLocation() {
         if (!fogo.parked) return
+        val missing = locationPermissions.filter { checkSelfPermission(it) != PERMISSION_GRANTED }
+        val asked = permissionPreferences.getBoolean("locationAsked", false)
+        // Android shows no prompt for a permission denied with "다시 묻지 않음", and the car settings have no switch
+        // for Pleos 위치 (FOGO_기술검증_결과.md), so say why instead of a button that silently does nothing.
+        if (asked && locationBlocked()) return showLocationBlocked()
+        val warning = if (asked && missing.isNotEmpty()) " 한 번 더 거부하면 다시 물어볼 수 없고, Pleos 위치는 차량 설정에서도 켤 수 없어요." else ""
         showSheet("LOCATION", "위치 기록 시작",
-            "차량 위치를 1km 블록으로 바꿔 기기에 저장해요. Android 위치와 Pleos 위치 접근을 허용해 주세요.",
+            "차량 위치를 1km 블록으로 바꿔 기기에 저장해요. Android 위치와 Pleos 위치 접근을 허용해 주세요. " +
+                "두 번째 창의 '알 수 없는 작업 실행'이 Pleos 위치 접근이에요.$warning",
             actions = listOf(Act("기록 없이 둘러보기") {}, Act("계속", true, weight = 1.4f) { requestRecording(false) }))
     }
 
@@ -291,13 +300,29 @@ class MainActivity : Activity() {
         if (!fogo.parked) return
         permissionFromOnboarding = onboarding
         val missing = locationPermissions.filter { checkSelfPermission(it) != PERMISSION_GRANTED }
-        if (missing.isEmpty()) finishPermission() else requestPermissions(missing.toTypedArray(), 7)
+        if (missing.isEmpty()) return finishPermission()
+        permissionPreferences.edit().putBoolean("locationAsked", true).apply()
+        requestPermissions(missing.toTypedArray(), 7)
     }
 
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, permissions, results)
-        if (code == 7) finishPermission()
+        if (code != 7) return
+        finishPermission()
+        // Also catches a denial from before this flag existed: the request comes straight back with no prompt.
+        if (locationBlocked()) showLocationBlocked()
     }
+
+    /** A location permission is denied with "다시 묻지 않음" (only meaningful once it was requested). */
+    private fun locationBlocked() = locationPermissions.any {
+        checkSelfPermission(it) != PERMISSION_GRANTED && !shouldShowRequestPermissionRationale(it)
+    }
+
+    private fun showLocationBlocked() = showSheet("LOCATION", "위치 권한을 다시 물을 수 없어요",
+        "'다시 묻지 않음'으로 거부되어 FOGO가 권한 창을 띄울 수 없어요. Android 위치는 차량 설정 > 앱 > FOGO에서 " +
+            "켤 수 있지만 Pleos 위치는 설정에 항목이 없어, FOGO 앱 저장공간을 지우거나 다시 설치해야 다시 물어봐요. " +
+            "기록 없이도 지도판과 차고는 그대로 쓸 수 있어요.",
+        actions = listOf(Act("확인", true) {}))
 
     private fun finishPermission() {
         permissionDenied = locationPermissions.any { checkSelfPermission(it) != PERMISSION_GRANTED }

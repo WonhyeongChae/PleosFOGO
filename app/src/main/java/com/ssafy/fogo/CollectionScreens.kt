@@ -253,12 +253,14 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
             setPadding(ui.dp(3), ui.dp(3), ui.dp(7), ui.dp(7))
         }
         body.addView(stats, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(6); bottomMargin = ui.dp(6) })
+        // The totals add up the sample books too, so say so like each sample card does (예시) — never a real count.
+        val sample = if (books.any { it.example }) " · 예시 포함" else ""
         listOf("TOTAL" to "지금까지 티켓 ${books.sumOf { it.visits } + currentMonthVisits}장",
             "BOOKS" to "티켓북 ${books.size}권",
             "REGIONS" to "새 지역 ${books.sumOf { it.newRegions }}곳").forEach { (key, value) ->
             val cell = ui.column().apply { setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(12)) }
             stats.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
-            cell.addView(ui.label(key, 11f, c.muted, pixel = true))
+            cell.addView(ui.label(key + sample, 11f, c.muted, pixel = true))
             cell.addView(ui.label(value, 20f, bold = true))
         }
         books.firstOrNull()?.let { latest ->

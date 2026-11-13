@@ -111,6 +111,16 @@ class AtlasProfileTest {
         assertEquals(untagged.spot, plain.books(today).single { !it.example }.memory)
     }
 
+    @Test fun unreadableRecordStartsFromTheSeedInsteadOfCrashing() {
+        val broken = "{\"car\":\"그랜저\",\"blocks\":{"
+        context.getSharedPreferences(key, 0).edit().putString("record", broken).commit()
+        val profile = Profile(context, key)
+        assertEquals("아반떼", profile.car)
+        assertEquals(broken, context.getSharedPreferences(key, 0).getString("record_unreadable", null))
+        assertTrue(profile.changeCar("그랜저"))
+        assertEquals("그랜저", Profile(context, key).car)
+    }
+
     @Test fun datedBoardUsesMonthBoundariesAndCountsAStickerOnce() {
         val city = cities.first()
         val profile = Profile(context, key)
