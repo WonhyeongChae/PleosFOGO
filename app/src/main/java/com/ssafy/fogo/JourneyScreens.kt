@@ -387,7 +387,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         val sheet = popup(host, body)
         val pass = ticketPass(host, sheet, TicketSpec(
             pass = "FOGO PASS", tag = "ARRIVAL · 도착", accent = city.color, stubColor = c.yellow,
-            stamp = if (arrival.sticker) "OPEN!" else "ARRIVED!", stampSub = city.region,
+            // Figma T1 stamp: the 시·도 name and how many of its spots are done (e.g. 강원 2/3).
+            stamp = city.region, stampSub = catalog.regions.firstOrNull { it.id == city.provinceId }
+                ?.let { "${it.opened(profile)}/${it.spots.size}" } ?: if (arrival.sticker) "OPEN!" else "ARRIVED!",
             code = "FG-" + arrival.day.filter(Char::isDigit).takeLast(8)))
         val panel = pass.body
         // FROM (last place reached before this one) ····· TO region, then the OPEN chip, as in Figma T1.
