@@ -23,7 +23,7 @@ import kotlin.math.hypot
  * - Figma look: the whole board is a grid of big square pixels. Sea tiles are pale blue, fog (unvisited)
  *   land is neutral grey with a dot, and a tile with an opened 1 km block is the flat, bright colour of
  *   its 시·도 (17 zones; 특별·광역시 a shade of the surrounding 도). No coast line; hairline 시·도 borders
- *   and names appear only when zoomed in.
+ *   always, names only when zoomed in.
  * - Pinch, drag and the +/- buttons zoom and pan. The zoom of each [key] survives re-renders.
  * - Stickers / magnets sit on the tile that holds their block as tilted tiles.
  * - When [pick] is set (placement) every tappable opened tile gets a small view ("열린 칸") so it works
@@ -230,8 +230,8 @@ class KoreaBoard(
                 val d = cell / 12f
                 canvas.drawRect(x + cell / 2 - d, y + cell / 2 - d, x + cell / 2 + d, y + cell / 2 + d, paint)
             }
-            // Hairline 시·도 borders only when zoomed in; the whole-country view is just pixels.
-            if (zoomed) {
+            // Hairline 시·도 borders at every zoom.
+            run {
                 paint.color = border
                 val up = zoneAt(column, row - 1)
                 val left = zoneAt(column - 1, row)
