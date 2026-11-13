@@ -106,9 +106,12 @@ class GarageArtwork(
             canvas.restore()
         }
         if (scarf != null) {
-            paint.color = scarf
-            canvas.drawRect(353f, 331f, 465f, 342f, paint)
-            canvas.drawRect(439f, 342f, 454f, 365f, paint)
+            // Scarf on the mascot's pixel grid (11 px cells): a band over the bottom row of the body
+            // and a tail on the right, outlined so a light scarf still reads on a white mascot.
+            val u = 11f
+            val x0 = 410f - face.width / 2f
+            val y0 = 349f - face.height + u * 10
+            drawScarf(canvas, paint, scarf, x0 + u, y0, u)
         }
         canvas.restore()
     }
@@ -122,5 +125,70 @@ private fun paintArtwork(canvas: Canvas, paint: Paint, art: AtlasArt.Artwork, co
     for (pixel in art.pixels) {
         paint.color = color(pixel.color)
         canvas.drawRect(pixel.x, pixel.y, pixel.x + pixel.w, pixel.y + pixel.h, paint)
+    }
+}
+
+/** Knit scarf in pixel cells of [u]: 14-cell band with a 2-cell tail hanging at cells 9–10. */
+internal fun drawScarf(canvas: Canvas, paint: Paint, color: Int, x: Float, y: Float, u: Float) {
+    val outline = 0xff0b1426.toInt()
+    val knit = darker(color)
+    paint.color = outline
+    canvas.drawRect(x, y - u * .3f, x + u * 14, y + u * 1.3f, paint)
+    canvas.drawRect(x + u * 9 - u * .3f, y + u, x + u * 11 + u * .3f, y + u * 3.3f, paint)
+    for (cell in 0 until 14) {
+        paint.color = if (cell % 2 == 0) color else knit
+        canvas.drawRect(x + u * cell, y, x + u * (cell + 1), y + u, paint)
+    }
+    for (row in 1..2) for (cell in 9..10) {
+        paint.color = if ((cell + row) % 2 == 0) color else knit
+        canvas.drawRect(x + u * cell, y + u * row, x + u * (cell + 1), y + u * (row + 1), paint)
+    }
+}
+
+private fun darker(color: Int): Int {
+    fun channel(shift: Int) = ((color shr shift and 0xff) * .78f).toInt()
+    return (0xff shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+}
+
+/** Pixel icon of a costume for the workshop and dress cards, drawn in the item's colour. */
+class CostumeIcon(
+    context: Context, private val art: AtlasArt, private val slot: String, private val color: Int,
+    private val night: Boolean,
+) : View(context) {
+    private val paint = Paint()
+
+    override fun onDraw(canvas: Canvas) {
+        canvas.drawColor(if (night) 0xff262930.toInt() else 0xfff3f4f6.toInt())
+        when (slot) {
+            "hat" -> fit(canvas, art["hat"]) { if (it == 0xffb8f53c.toInt()) color else it }
+            "wrap" -> fit(canvas, art["car"]) { if (it == 0xff1f5fae.toInt()) color else it }
+            "clothes" -> {
+                val u = minOf(width / 16f, height / 6f)
+                drawScarf(canvas, paint, color, (width - u * 14) / 2f, (height - u * 3) / 2f, u)
+            }
+            else -> {
+                // Background: a little sky-and-ground tile in the item's colour.
+                val u = minOf(width, height) / 8f
+                val x = (width - u * 8) / 2f
+                val y = (height - u * 8) / 2f
+                paint.color = 0xff0b1426.toInt()
+                canvas.drawRect(x, y, x + u * 8, y + u * 8, paint)
+                paint.color = color
+                canvas.drawRect(x + u * .5f, y + u * .5f, x + u * 7.5f, y + u * 5f, paint)
+                paint.color = 0xffa8d672.toInt()
+                canvas.drawRect(x + u * .5f, y + u * 5f, x + u * 7.5f, y + u * 7.5f, paint)
+                paint.color = 0xffffd43b.toInt()
+                canvas.drawRect(x + u * 5f, y + u * 1.2f, x + u * 6.4f, y + u * 2.6f, paint)
+            }
+        }
+    }
+
+    private fun fit(canvas: Canvas, artwork: AtlasArt.Artwork, recolor: (Int) -> Int) {
+        val scale = minOf(width * .8f / artwork.width, height * .8f / artwork.height)
+        canvas.save()
+        canvas.translate((width - artwork.width * scale) / 2, (height - artwork.height * scale) / 2)
+        canvas.scale(scale, scale)
+        paintArtwork(canvas, paint, artwork, recolor)
+        canvas.restore()
     }
 }

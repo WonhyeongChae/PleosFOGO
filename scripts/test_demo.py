@@ -93,7 +93,7 @@ def main():
         tap("지도판에 스티커 붙이기")
         tap("열린 칸", "content-desc")
         tap("여기 붙이기")
-        wait_for(f"{region} 스티커 · 배치 완료")
+        wait_for(f"{region} 스티커 · 배치 완료", attribute="content-desc")
         tap("지도")
         print(f"{city} 주행 제한, 도착, 보상과 스티커 배치 확인", flush=True)
 
@@ -104,7 +104,7 @@ def main():
     tap("자석")
     tap("열린 칸", "content-desc")
     tap("여기 붙이기")
-    wait_for("강원 자석 · 배치 완료")
+    wait_for("강원 자석 · 배치 완료", attribute="content-desc")
     print("강원 세 번째 명소와 자석 배치 확인", flush=True)
 
     tap("차고")

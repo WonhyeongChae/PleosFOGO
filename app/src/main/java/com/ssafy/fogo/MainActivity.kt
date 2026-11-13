@@ -115,8 +115,9 @@ class MainActivity : Activity() {
         val config = resources.configuration
         val wide = config.screenWidthDp >= 760 && config.screenWidthDp > config.screenHeightDp
         // Figma frames are 1700 (wide) / 840 (portrait) units across; grow toward them on large Pleos displays.
-        val scale = if (wide) (config.screenWidthDp / 1240f).coerceIn(1f, 1.4f)
-            else (config.screenWidthDp / 600f).coerceIn(1f, 1.3f)
+        // At 1,700 dp wide (Pleos Connect) this makes 1 Figma px ≈ 1 dp: 40 px titles, 100 px buttons.
+        val scale = if (wide) (config.screenWidthDp / 1000f).coerceIn(1f, 1.7f)
+            else (config.screenWidthDp / 500f).coerceIn(1f, 1.6f)
         ui = AtlasUi(this, AtlasColors(themeOverride ?: fogo.trip.scene.night), wide, scale)
         window.statusBarColor = colors.navy
         window.navigationBarColor = colors.navy
@@ -135,7 +136,7 @@ class MainActivity : Activity() {
         if (wide && usesRail) {
             val row = ui.row().apply { gravity = Gravity.TOP }
             val content = ui.column()
-            row.addView(rail(), LinearLayout.LayoutParams(ui.dp(136), -1))
+            row.addView(rail(), LinearLayout.LayoutParams(ui.dp(110), -1))
             row.addView(content, LinearLayout.LayoutParams(0, -1, 1f))
             root.addView(row, LinearLayout.LayoutParams(-1, -1))
             header(content)
@@ -206,7 +207,8 @@ class MainActivity : Activity() {
     private fun header(parent: LinearLayout) {
         val bar = ui.row().apply {
             setBackgroundColor(colors.navy)
-            setPadding(ui.dp(16), ui.dp(8), ui.dp(14), ui.dp(8))
+            minimumHeight = ui.dp(70)
+            setPadding(ui.dp(22), ui.dp(8), ui.dp(20), ui.dp(8))
         }
         parent.addView(bar, LinearLayout.LayoutParams(-1, -2))
         if (page !in mainTabs && page != Page.INTRO) {
@@ -215,9 +217,9 @@ class MainActivity : Activity() {
         }
         val titles = if (ui.wide) ui.row() else ui.column()
         bar.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        titles.addView(ui.label("FOGO PASS", 12f, colors.lime, pixel = true),
+        titles.addView(ui.label("FOGO PASS", 13f, colors.lime, pixel = true),
             LinearLayout.LayoutParams(-2, -2).apply { if (ui.wide) marginEnd = ui.dp(14) })
-        titles.addView(ui.label(page.title, 24f, colors.white, bold = true))
+        titles.addView(ui.label(page.title, 25f, colors.white, bold = true))
         if (fogo.replayCity != null) bar.addView(ui.label("시연 재생", 15f, colors.lime, bold = true))
     }
 
@@ -238,7 +240,9 @@ class MainActivity : Activity() {
 
     private fun driving() {
         val root = FrameLayout(this).apply { setBackgroundColor(colors.navy) }
-        root.addView(AtlasArtworkView(this, art[if (ui.wide) "drive_wide" else "drive_portrait"], colors.night, fogo.trip.scene.rain),
+        // Pixel scene keeps rolling while driving: nothing to read or touch, just a sense of moving.
+        root.addView(DriveSceneView(this, art[if (ui.wide) "drive_wide" else "drive_portrait"], colors.night,
+            speed = if (fogo.trip.gear == Gear.DRIVE) 2f else 0f, rain = fogo.trip.scene.rain, headroom = 260f),
             FrameLayout.LayoutParams(-1, -1))
         val status = if (fogo.trip.gear == Gear.DRIVE && (fogo.recording || fogo.replayCity != null)) "기록 중"
             else if (fogo.locationIssue != null) "위치 연결 대기 중" else "정차 후 이용할 수 있어요"
