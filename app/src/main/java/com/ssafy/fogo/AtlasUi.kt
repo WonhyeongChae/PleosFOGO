@@ -37,7 +37,7 @@ class AtlasColors(val night: Boolean) {
  * (1700×1184 / 840×1184 frames) on wide Pleos displays instead of rendering at phone size.
  */
 /** Text-size factor for Galmuri so it fits where the previous sans did. */
-const val GALMURI = .86f
+const val GALMURI = .9f
 
 class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: Boolean, val scale: Float = 1f) {
     /** Galmuri11 (Korean pixel font) for all Hangul text; Press Start 2P stays for Latin ticket marks. */
