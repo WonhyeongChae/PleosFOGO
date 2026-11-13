@@ -33,9 +33,13 @@ def main():
             return []
         return list(ElementTree.fromstring(shell("cat", path)).iter("node"))
 
+    def value(node, attribute):
+        # Labels glue Korean words with U+2060 WORD JOINER so they only wrap at spaces.
+        return node.get(attribute, "").replace("\u2060", "")
+
     def locate(entries, needle, attribute):
-        matching = [node for node in entries if node.get(attribute, "") == needle]
-        matching += [node for node in entries if node.get(attribute, "").strip().endswith("\n" + needle)]
+        matching = [node for node in entries if value(node, attribute) == needle]
+        matching += [node for node in entries if value(node, attribute).strip().endswith("\n" + needle)]
         return next((node for node in matching if node.get("clickable") == "true" and node.get("enabled") != "false"),
                     next(iter(matching), None))
 
@@ -47,7 +51,7 @@ def main():
             hit = locate(last, needle, attribute)
             if hit is not None:
                 return hit
-        visible = [node.get("text") for node in last if node.get("text")]
+        visible = [value(node, "text") for node in last if node.get("text")]
         raise AssertionError(f"{needle!r} 화면에 없음. 표시된 텍스트: {visible}")
 
     def tap(needle, attribute="text"):
