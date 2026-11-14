@@ -91,3 +91,14 @@ data class TripTags(val rain: Boolean = false, val night: Boolean = false, val c
 enum class Gear { UNKNOWN, PARK, DRIVE, OTHER }
 
 data class Arrival(val city: City, val sticker: Boolean, val material: Boolean, val day: String, val tags: TripTags, val magnet: Boolean = false)
+
+/**
+ * This word with the Korean particle its last syllable takes: [consonant] after a final consonant (받침),
+ * [vowel] otherwise, e.g. "안개 구름".particle("과", "와") → "안개 구름과", "평창 스티커".particle("을", "를") → "평창 스티커를".
+ * "으로"/"로" also takes "로" after ㄹ. A word that does not end in Hangul gets [vowel].
+ */
+fun String.particle(consonant: String, vowel: String): String {
+    val last = lastOrNull()?.takeIf { it in '\uAC00'..'\uD7A3' } ?: return this + vowel
+    val jong = (last - '\uAC00') % 28
+    return this + if (jong == 0 || (consonant == "으로" && jong == 8)) vowel else consonant
+}
