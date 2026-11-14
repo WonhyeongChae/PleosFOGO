@@ -27,4 +27,5 @@ dependencies {
     implementation("ai.pleos.playground:fused-location-data:0.0.3")
     implementation("ai.pleos.playground:NaviHelper:3.0.5")
     implementation("ai.pleos.playground:TextToSpeech:3.3.1")
+    implementation("com.google.zxing:core:3.5.3")
 }

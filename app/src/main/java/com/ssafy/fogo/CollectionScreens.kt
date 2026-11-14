@@ -44,10 +44,19 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
     }
 
     private fun garage(body: LinearLayout) {
-        ui.split(body, { left -> garagePreview(left) }, { right ->
+        ui.split(body, { left ->
+            garagePreview(left)
+            commute(left)
+        }, { right ->
             val panel = ui.card(right)
             ui.text(panel, profile.car, 35f, bold = true)
             ui.text(panel, "${profile.mascot.particle("과", "와")} 함께 · 지도판 ${profile.blocks.size}블록", 17f, c.muted)
+            val km = fogo.odometerKm
+            val birthdays = profile.birthdays()
+            ui.text(panel, if (km == null) "차 생일 · 주행거리를 기다리는 중이에요" else
+                "함께 달린 거리 ${"%,d".format(km.toLong())} km · 다음 생일까지 ${"%,d".format((profile.nextBirthday(km) - km).toLong().coerceAtLeast(0))} km",
+                17f, bold = true)
+            if (birthdays.isNotEmpty()) ui.text(panel, "지난 생일 · " + birthdays.joinToString(" · ") { "${it / Profile.BIRTHDAY_KM}만 km" }, 15f, c.muted)
             ui.grid(panel, slots.map { (id, label) ->
                 ui.column().apply {
                     background = ui.box(c.paper)
@@ -69,6 +78,29 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
             if (fogo.replayAllowed) extra += Act("기록 이어받기(시연)", click = ::confirmTransfer)
             ui.actions(panel, extra, topMargin = 8)
         })
+    }
+
+    /** 출퇴근 루틴: this week's count toward [Profile.COMMUTE_GOAL], and 집·회사 set from where the car is parked. */
+    private fun commute(parent: LinearLayout) {
+        val card = ui.card(parent)
+        val count = profile.commutes().coerceAtMost(Profile.COMMUTE_GOAL)
+        ui.text(card, "출퇴근 루틴 · 이번 주 $count/${Profile.COMMUTE_GOAL}", 20f, bold = true)
+        ui.progress(card, count / Profile.COMMUTE_GOAL.toFloat())
+        ui.text(card, "집과 회사 사이를 주 ${Profile.COMMUTE_GOAL}번 오가면 공용 재료 +${Profile.COMMUTE_MATERIALS}, 출퇴근 스티커", 15f, c.muted)
+        val home = profile.place("home")
+        val work = profile.place("work")
+        ui.text(card, "집 · ${if (home == null) "미등록" else "등록됨"}    회사 · ${if (work == null) "미등록" else "등록됨"}", 16f, bold = true)
+        val here = fogo.currentPoint
+        fun register(name: String, label: String) = Act("지금 위치를 $label", enabled = here != null) {
+            val point = fogo.currentPoint
+            if (!fogo.parked || point == null) host.message("위치 기록을 켜고 주차한 뒤 등록해요")
+            else if (profile.setPlace(name, point)) { host.message("${label.particle("으로", "로")} 등록했어요"); host.render() }
+        }
+        ui.actions(card, listOf(register("home", "집"), register("work", "회사")), topMargin = 6)
+        if (here == null) ui.text(card, "위치 기록을 켜면 지금 주차한 곳을 등록할 수 있어요", 14f, c.muted)
+        if (fogo.replayAllowed && count < Profile.COMMUTE_GOAL - 1) ui.button(card, "시연 · 이번 주 4회 채우기") {
+            if (fogo.parked && profile.setCommutes(Profile.COMMUTE_GOAL - 1)) host.render()
+        }
     }
 
     private fun confirmTransfer() {

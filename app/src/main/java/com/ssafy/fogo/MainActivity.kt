@@ -19,6 +19,7 @@ enum class Page(val title: String) {
     JOURNEY("목적지 미리보기"), ARRIVAL("도착 탑승권"), BOARD("아틀라스"), PLACE("스티커·자석 붙이기"),
     REGION("시·도 상세"), GARAGE("차고"), WORKSHOP("공방"), DRESS("입히기"),
     RECAP("리캡"), BOOK("월간 티켓북"), TRANSFER("새 차로 이어가기"), SETTINGS("시연 설정"),
+    FRIENDS("친구"), FRIEND("친구 지도판"),
 }
 
 class MainActivity : Activity() {
@@ -31,6 +32,7 @@ class MainActivity : Activity() {
     val colors get() = ui.colors
     private lateinit var journey: JourneyScreens
     private lateinit var collection: CollectionScreens
+    private lateinit var friends: FriendScreens
     var page = Page.ATLAS
         private set
     private var arrivalSeen: String? = null
@@ -49,7 +51,7 @@ class MainActivity : Activity() {
     /** Whether location was ever requested, to tell a first request from a "다시 묻지 않음" denial. */
     private val permissionPreferences by lazy { getSharedPreferences("fogo_permissions", MODE_PRIVATE) }
     private var themeOverride: Boolean? = null
-    private val mainTabs = listOf(Page.ATLAS, Page.GARAGE, Page.RECAP, Page.SETTINGS)
+    private val mainTabs = listOf(Page.ATLAS, Page.GARAGE, Page.FRIENDS, Page.RECAP, Page.SETTINGS)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,11 +63,13 @@ class MainActivity : Activity() {
         themeOverride = themePreferences.getString("demoTheme", null)?.toBooleanStrictOrNull()
         journey = JourneyScreens(this, savedInstanceState)
         collection = CollectionScreens(this, savedInstanceState)
+        friends = FriendScreens(this, savedInstanceState)
     }
 
     override fun onStart() {
         super.onStart()
         fogo.redraw = ::render
+        fogo.say = ::message
         fogo.applyLiveTags()
         render()
         fogo.refreshDestination()
@@ -73,6 +77,7 @@ class MainActivity : Activity() {
 
     override fun onStop() {
         fogo.redraw = null
+        fogo.say = null
         dialog?.dismiss()
         super.onStop()
     }
@@ -84,6 +89,7 @@ class MainActivity : Activity() {
         outState.putBoolean("permissionFromOnboarding", permissionFromOnboarding)
         journey.save(outState)
         collection.save(outState)
+        friends.save(outState)
         super.onSaveInstanceState(outState)
     }
 
@@ -104,6 +110,7 @@ class MainActivity : Activity() {
         Page.PLACE -> Page.BOARD
         Page.WORKSHOP, Page.DRESS, Page.TRANSFER -> Page.GARAGE
         Page.BOOK -> Page.RECAP
+        Page.FRIEND -> Page.FRIENDS
         else -> Page.ATLAS
     }
 
@@ -149,7 +156,7 @@ class MainActivity : Activity() {
         entering = page != lastPage
         val oldScroll = if (page == lastPage) scroll?.scrollY ?: 0 else 0
         val root = ui.column().apply { setBackgroundColor(colors.background) }
-        val usesRail = page in mainTabs || page in setOf(Page.JOURNEY, Page.BOARD, Page.REGION)
+        val usesRail = page in mainTabs || page in setOf(Page.JOURNEY, Page.BOARD, Page.REGION, Page.FRIEND)
         if (wide && usesRail) {
             val row = ui.row().apply { gravity = Gravity.TOP }
             val content = ui.column()
@@ -173,6 +180,7 @@ class MainActivity : Activity() {
         }
         lastPage = page
         setContentView(root)
+        if (fogo.notices.isNotEmpty()) root.post(::showNextNotice)
     }
 
     /** 시작하기 on the intro: new drivers go through consent and mascot, returning ones straight to the atlas. */
@@ -183,7 +191,51 @@ class MainActivity : Activity() {
         render()
     }
 
-    private fun tabForPage() = if (page in mainTabs) page else Page.ATLAS
+    /** One waiting notice (차 생일, 출퇴근 완료, 친구 수락) as a sheet, only on a parked, settled screen. */
+    private fun showNextNotice() {
+        if (!fogo.parked || dialog?.isShowing == true || !profile.onboarded ||
+            page in setOf(Page.SPLASH, Page.INTRO, Page.CONSENT, Page.MASCOT, Page.ARRIVAL)) return
+        val notice = fogo.notices.removeFirstOrNull() ?: return
+        val target = notice.target
+        showSheet(notice.tag, notice.title, notice.message, actions = listOfNotNull(
+            Act("확인", target == null) {},
+            target?.let { Act(notice.action ?: "보러 가기", true, weight = 1.4f) { go(it) } }))
+        notice.speak?.let(fogo::speak)
+    }
+
+    /**
+     * 폰으로 보내기 (Figma S1): a QR the phone camera reads. With no server yet the QR carries the summary text
+     * itself; the service would carry a link to the image. Blocks are never in it, so 집·회사 stay out.
+     */
+    fun share(title: String, summary: String) {
+        val body = ui.row().apply { gravity = Gravity.CENTER_VERTICAL }
+        val size = ui.dp(if (ui.wide) 260 else 200)
+        body.addView(ImageView(this).apply {
+            setImageBitmap(Qr.bitmap(summary, size))
+            contentDescription = "공유 QR"
+        }, LinearLayout.LayoutParams(size, size))
+        val words = ui.column()
+        body.addView(words, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = ui.dp(20) })
+        words.addView(ui.label(summary, 17f, colors.ink))
+        words.addView(ui.label("시연: QR에 요약 글이 들어 있어요. 서비스에서는 이미지 링크가 들어가요.", 14f, colors.muted),
+            LinearLayout.LayoutParams(-2, -2).apply { topMargin = ui.dp(12) })
+        showSheet("SHARE", title, "폰 카메라로 찍으면 저장할 수 있어요", body, listOf(Act("닫기", true) {}), width = ui.fx(1100))
+    }
+
+    /** What a shared 지도판 says: car, fog lifted, stickers, and each 시·도's 명소 — no blocks or places. */
+    fun boardSummary(): String {
+        val stickers = catalog.boardItems.count { !it.magnet && profile.owns(it.id) }
+        val magnets = catalog.boardItems.count { it.magnet && profile.owns(it.id) }
+        val regions = catalog.regions.joinToString(" · ") { "${it.name} ${it.opened(profile)}/${it.spots.size}" }
+        return "FOGO 지도판\n${profile.car} · ${profile.mascot}\n걷힌 안개 ${profile.blocks.size}칸 · 스티커 $stickers · 자석 $magnets\n" +
+            "명소 $regions\n#FOGO #Pleos"
+    }
+
+    private fun tabForPage() = when (page) {
+        in mainTabs -> page
+        Page.FRIEND -> Page.FRIENDS
+        else -> Page.ATLAS
+    }
 
     private fun rail(): View {
         val container = FrameLayout(this)
@@ -193,7 +245,7 @@ class MainActivity : Activity() {
         }
         container.addView(rail, FrameLayout.LayoutParams(-1, -1))
         ui.text(rail, "FOGO", 19f, colors.dark, pixel = true).gravity = Gravity.CENTER
-        val icons = listOf(PixelIconView.ATLAS, PixelIconView.GARAGE, PixelIconView.RECAP, PixelIconView.SETTINGS)
+        val icons = listOf(PixelIconView.ATLAS, PixelIconView.GARAGE, PixelIconView.FRIENDS, PixelIconView.RECAP, PixelIconView.SETTINGS)
         mainTabs.forEachIndexed { index, item ->
             val selected = tabForPage() == item
             val tab = ui.column().apply {
@@ -262,6 +314,7 @@ class MainActivity : Activity() {
             Page.BOARD, Page.PLACE, Page.REGION -> journey.show(page, body)
             Page.GARAGE, Page.WORKSHOP, Page.DRESS, Page.RECAP, Page.BOOK, Page.TRANSFER -> collection.show(page, body)
             Page.SETTINGS -> settings(body)
+            Page.FRIENDS, Page.FRIEND -> friends.show(page, body)
         }
         if (oldScroll > 0) window.post { window.scrollTo(0, oldScroll) }
     }
