@@ -15,7 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 
 enum class Page(val title: String) {
-    INTRO("FOGO"), CONSENT("위치 기록 동의"), MASCOT("같이 달릴 친구"), ATLAS("아틀라스"),
+    SPLASH("FOGO"), INTRO("FOGO"), CONSENT("위치 기록 동의"), MASCOT("같이 달릴 친구"), ATLAS("아틀라스"),
     JOURNEY("목적지 미리보기"), ARRIVAL("도착 탑승권"), BOARD("아틀라스"), PLACE("스티커·자석 붙이기"),
     REGION("시·도 상세"), GARAGE("차고"), WORKSHOP("공방"), DRESS("입히기"),
     RECAP("리캡"), BOOK("월간 티켓북"), TRANSFER("새 차로 이어가기"), SETTINGS("시연 설정"),
@@ -40,6 +40,8 @@ class MainActivity : Activity() {
     private var notice: View? = null
     private var scroll: ScrollView? = null
     private var lastPage: Page? = null
+    /** Opening video screen, kept across redraws so location/gear updates do not restart the clip. */
+    private var splash: IntroSplash? = null
     /** True while the current render is the first one for [page]; screens use it for entrance motion. */
     var entering = false
         private set
@@ -51,8 +53,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        page = savedInstanceState?.getString("page")?.let(Page::valueOf)
-            ?: if (profile.onboarded) Page.ATLAS else Page.INTRO
+        // Every fresh launch opens on the intro video; the 시작하기 button then leads on.
+        page = savedInstanceState?.getString("page")?.let(Page::valueOf) ?: Page.SPLASH
         arrivalSeen = savedInstanceState?.getString("arrivalSeen")
         permissionDenied = savedInstanceState?.getBoolean("permissionDenied") == true
         permissionFromOnboarding = savedInstanceState?.getBoolean("permissionFromOnboarding") == true
@@ -86,7 +88,7 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (!fogo.parked || page in mainTabs || page == Page.INTRO) super.onBackPressed()
+        if (!fogo.parked || page in mainTabs || page == Page.INTRO || page == Page.SPLASH) super.onBackPressed()
         else go(parentPage())
     }
 
@@ -97,7 +99,7 @@ class MainActivity : Activity() {
     }
 
     private fun parentPage() = when (page) {
-        Page.CONSENT -> Page.INTRO
+        Page.CONSENT -> Page.SPLASH
         Page.MASCOT -> if (profile.onboarded) Page.GARAGE else Page.CONSENT
         Page.PLACE -> Page.BOARD
         Page.WORKSHOP, Page.DRESS, Page.TRANSFER -> Page.GARAGE
@@ -128,12 +130,21 @@ class MainActivity : Activity() {
         window.statusBarColor = colors.navy
         window.navigationBarColor = colors.navy
         if (!fogo.parked) {
+            splash = null
             dialog?.dismiss()
             lastPage = null
             scroll = null
             driving()
             return
         }
+
+        if (page == Page.SPLASH) {
+            val view = splash ?: IntroSplash(this, ::leaveSplash).also { splash = it }
+            if (view.parent == null) setContentView(view)
+            lastPage = page
+            return
+        }
+        splash = null
 
         entering = page != lastPage
         val oldScroll = if (page == lastPage) scroll?.scrollY ?: 0 else 0
@@ -162,6 +173,14 @@ class MainActivity : Activity() {
         }
         lastPage = page
         setContentView(root)
+    }
+
+    /** 시작하기 on the intro: new drivers go through consent and mascot, returning ones straight to the atlas. */
+    private fun leaveSplash() {
+        if (!fogo.parked) return
+        splash = null
+        page = if (profile.onboarded) Page.ATLAS else Page.CONSENT
+        render()
     }
 
     private fun tabForPage() = if (page in mainTabs) page else Page.ATLAS
@@ -239,7 +258,7 @@ class MainActivity : Activity() {
         scroll = window
         if (fogo.trip.storageFailed) ui.text(body, "기기 저장에 실패했어요", color = colors.muted)
         when (page) {
-            Page.INTRO, Page.CONSENT, Page.MASCOT, Page.ATLAS, Page.JOURNEY, Page.ARRIVAL,
+            Page.SPLASH, Page.INTRO, Page.CONSENT, Page.MASCOT, Page.ATLAS, Page.JOURNEY, Page.ARRIVAL,
             Page.BOARD, Page.PLACE, Page.REGION -> journey.show(page, body)
             Page.GARAGE, Page.WORKSHOP, Page.DRESS, Page.RECAP, Page.BOOK, Page.TRANSFER -> collection.show(page, body)
             Page.SETTINGS -> settings(body)
@@ -373,7 +392,7 @@ class MainActivity : Activity() {
             ui.button(card, "시연 기록 초기화") {
                 showSheet("DEMO", "시연 기록 초기화", "이 기기에서 모은 방문 기록과 수집품, 차량 선택을 초기화합니다.",
                     actions = listOf(Act("취소") {}, Act("초기화", true, weight = 1.4f) {
-                        if (fogo.parked) { page = Page.INTRO; fogo.resetDemo() }
+                        if (fogo.parked) { page = Page.SPLASH; fogo.resetDemo() }
                     }))
             }
         }
