@@ -46,7 +46,6 @@ def blit_mask(img, m, x, y, col, a=1.0):
     sub = m[y0 - y:y1 - y, x0 - x:x1 - x]
     reg = img[y0:y1, x0:x1]
     reg[sub] = reg[sub] * (1 - a) + col * a
-LM_OUT = [dilate(m, 3) for m in LM]
 def edge_masks(m):
     up = np.roll(m, 2, 0); up[:2] = False
     lf = np.roll(m, 2, 1); lf[:, :2] = False
@@ -55,12 +54,20 @@ def edge_masks(m):
     hi = m & ~(up & lf); lo = m & ~(dn & rt) & ~hi
     return hi, lo
 LE = [edge_masks(m) for m in LM]
-def ring(m):
-    p = np.pad(m, 3); inner = p.copy()
-    for dy, dx in ((3,0),(-3,0),(0,3),(0,-3)):
-        inner &= np.roll(np.roll(p, dy, 0), dx, 1)
-    return m & ~inner[3:-3, 3:-3]
-LR = [ring(m) for m in LM]
+LOGO_CACHE = {}
+def logo_set(bl):
+    """Letters at block size bl: (mask, outline, (highlight, lowlight)) per letter, outline px, letter gap."""
+    if bl not in LOGO_CACHE:
+        px = max(1, round(bl * 3 / BL))
+        letters = []
+        for ch in LETTERS:
+            k = np.zeros((7 * bl, 5 * bl), bool)
+            for r, row in enumerate(FONT[ch]):
+                for c, v in enumerate(row):
+                    if v == '1': k[r*bl:(r+1)*bl, c*bl:(c+1)*bl] = True
+            letters.append((k, dilate(k, px), edge_masks(k)))
+        LOGO_CACHE[bl] = letters, px, round(bl * GAP / BL)
+    return LOGO_CACHE[bl]
 
 # ---------- mascot sprite ----------
 SPR = """
@@ -100,6 +107,7 @@ LCX = [LX0 + i * (LW + GAP) + LW // 2 for i in range(4)]
 TOP = LY0
 def ease_out(u): return 1 - (1 - u) ** 2
 def ease_in(u): return u * u
+def ease_in_out(u): return u * u * (3 - 2 * u)
 EXIT_X = LX0 + 4 * LW + 3 * GAP + 43
 SEG = [  # (t0, t1, p0, p1, hop height, easing)
     (2.5, 3.3, (-40, ROAD_Y), (LX0 - 37, ROAD_Y), 0, ease_out),
@@ -159,7 +167,11 @@ DLON = (LAT_SPAN / ROWS) / 0.81
 def ll2cell(lon, lat):
     return (lat - LAT_TOP) / -LAT_SPAN * ROWS, (lon - LONC) / DLON
 COLS = 30
-CX0 = W // 2 - COLS * CSX // 2
+# Map sits on the right; the logo slides into the space on its left (see frame()).
+CX0 = W - 44 - COLS * CSX
+SLIDE_T0, SLIDE_DUR, END_BL = 6.3, 0.7, 6
+END_W = 4 * 5 * END_BL + 3 * round(END_BL * GAP / BL)
+END_X, END_Y = (40 + CX0 - END_W) // 2, MY0 + 125 - 7 * END_BL // 2
 POLY = [(126.7,37.95),(127.1,38.3),(127.8,38.3),(128.35,38.6),(128.6,38.2),(129.0,37.7),(129.35,37.1),(129.45,36.5),(129.4,36.05),(129.55,36.0),(129.45,35.5),(129.2,35.15),(128.9,35.05),(128.6,34.9),(128.4,34.85),(128.0,34.9),(127.75,34.75),(127.5,34.85),(127.3,34.6),(126.9,34.4),(126.5,34.35),(126.3,34.6),(126.4,35.0),(126.35,35.4),(126.6,35.8),(126.5,36.1),(126.6,36.4),(126.3,36.6),(126.15,36.8),(126.5,36.95),(126.85,36.95),(126.7,37.25),(126.55,37.55),(126.4,37.75)]
 def inpoly(x, y, P):
     ins = False
@@ -276,30 +288,31 @@ def frame(t):
             for dx in range(0, W, 24):
                 a, b = max(dx, x0), min(dx + 14, x1)
                 if b > a: rect(img, a, ROAD_Y + 6, b - a, 2, YEL)
-    # logo
+    # logo: neon letters that squash when the car lands; from SLIDE_T0 they slide left and shrink
+    # so the map owns the right half, staying solid the whole time (no hollow outline over the routes).
     pulse = 0.85 + 0.15 * math.sin(t * 5)
     if t > 10.3: pulse = 1 + 0.5 * max(0, 1 - (t - 10.3) / 0.5)
-    for i in range(4):
+    u = ease_in_out(min(1, max(0, (t - SLIDE_T0) / SLIDE_DUR)))
+    bl = int(round(BL + (END_BL - BL) * u))
+    ox, oy = int(round(LX0 + (END_X - LX0) * u)), int(round(LY0 + (END_Y - LY0) * u))
+    letters, px, gap = logo_set(bl)
+    for i, (k, k_out, (k_hi, k_lo)) in enumerate(letters):
         on = letter_on(i, t)
         sq = fl = 0.0
         for tl, li in LAND_EV:
             if li == i and 0 <= t - tl < 0.3:
                 sq = max(sq, 4 * (1 - (t - tl) / 0.18)); fl = max(fl, 1 - (t - tl) / 0.3)
-        x, y = LX0 + i * (LW + GAP), LY0 + int(max(0, sq)) + shake
-        hol = min(1, max(0, (t - 6.5) / 0.4))
-        fa = 1 - 0.68 * hol
-        blit_mask(img, LM_OUT[i], x - 3, y - 3, OUT, 1 - 0.45 * hol)
-        blit_mask(img, LM_OUT[i], x - 3 + 4, y - 3 + 4, OUT, 1 - hol)
-        if on > 0: blit_mask(img, LM[i], x + 4, y + 4, SHADOW, on * (1 - hol))
-        blit_mask(img, LM[i], x, y, OFF, fa)
+        x, y = ox + i * (5 * bl + gap), oy + int(max(0, sq)) + shake
+        blit_mask(img, k_out, x - px, y - px, OUT)
+        blit_mask(img, k_out, x + 1, y + 1, OUT)
+        if on > 0: blit_mask(img, k, x + px + 1, y + px + 1, SHADOW, on)
+        blit_mask(img, k, x, y, OFF)
         if on > 0:
             base = LIME * (1 - fl) + WHITE * fl
-            blit_mask(img, LM[i], x, y, base, on * fa)
-            blit_mask(img, LE[i][0], x, y, LIME_HI * (1 - fl) + WHITE * fl, on * fa)
-            blit_mask(img, LE[i][1], x, y, LIME_LO * (1 - fl) + WHITE * fl, on * fa)
-            if hol > 0: blit_mask(img, LR[i], x, y, LIME_HI * 0.7 + WHITE * 0.3, hol)
-            blit_mask(glow, LM[i], x, y, base, on * min(1.6, pulse + fl) * (1 - hol))
-            if hol > 0: blit_mask(glow, LR[i], x, y, LIME, hol * min(1.6, pulse))
+            blit_mask(img, k, x, y, base, on)
+            blit_mask(img, k_hi, x, y, LIME_HI * (1 - fl) + WHITE * fl, on)
+            blit_mask(img, k_lo, x, y, LIME_LO * (1 - fl) + WHITE * fl, on)
+            blit_mask(glow, k, x, y, base, on * min(1.6, pulse + fl))
     # sparks
     for tl, px, py, vx, vy, w in SPARKS:
         dt = t - tl
