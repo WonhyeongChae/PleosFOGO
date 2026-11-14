@@ -47,6 +47,20 @@ class TripEngineTest {
         assertTrue(arrival!!.tags.companion)
     }
 
+    @Test fun rearDoorBeforeDepartureMakesTheTripWithFamily() {
+        val city = cities.first()
+        engine.gear(Gear.PARK, now)
+        engine.tags(TripTags(companion = true), now)
+        engine.tags(TripTags(companion = true, family = true), now + 500)
+        engine.tags(TripTags(), now + 1_000)
+        engine.gear(Gear.DRIVE, now + 2_000)
+        engine.location(Fix(city.point, now + 3_000), now + 3_000)
+        val arrival = engine.gear(Gear.PARK, now + 4_000)
+        assertNotNull(arrival)
+        assertTrue(arrival!!.tags.family)
+        assertEquals("가족과", arrival.tags.summary())
+    }
+
     @Test fun doorOpenedWhileDrivingIsNotAPassenger() {
         val city = cities.last()
         engine.gear(Gear.PARK, now)
@@ -56,7 +70,7 @@ class TripEngineTest {
         engine.location(Fix(city.point, now + 4_000), now + 4_000)
         val arrival = engine.gear(Gear.PARK, now + 5_000)
         assertNotNull(arrival)
-        assertFalse(arrival!!.tags.companion)
+        assertFalse(arrival!!.tags.together)
     }
 
     @Test fun duplicatesAndRestartKeepOneRewardAndTheSameBoard() {

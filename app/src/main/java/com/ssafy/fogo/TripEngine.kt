@@ -15,9 +15,12 @@ class TripEngine(private val profile: Profile, private val cities: List<City>) {
     /**
      * 둘이서: the passenger door opened while parked (not just after an arrival, when someone gets out) is a passenger
      * getting in. It counts for the next departure within [BOARDING_MS] and stays with the trip until the arrival.
+     * 가족과: the same with a rear door.
      */
     private var boardedAt: Long? = null
+    private var boardedFamily = false
     private var companionAboard = false
+    private var familyAboard = false
     var storageFailed = false
         private set
 
@@ -30,14 +33,20 @@ class TripEngine(private val profile: Profile, private val cities: List<City>) {
         arrivalTime = 0
         storageFailed = false
         boardedAt = null
+        boardedFamily = false
         companionAboard = false
+        familyAboard = false
     }
 
     fun gear(value: Gear, now: Long): Arrival? {
         if (value == Gear.DRIVE && gear != Gear.DRIVE) {
-            if (boardedAt?.let { now - it in 0..BOARDING_MS } == true) companionAboard = true
+            if (boardedAt?.let { now - it in 0..BOARDING_MS } == true) {
+                companionAboard = true
+                familyAboard = familyAboard || boardedFamily
+            }
             boardedAt = null
-            accumulated = scene.copy(companion = companionAboard)
+            boardedFamily = false
+            accumulated = scene.copy(companion = companionAboard && !familyAboard, family = familyAboard)
             arrival = null
         }
         gear = value
@@ -54,20 +63,23 @@ class TripEngine(private val profile: Profile, private val cities: List<City>) {
     }
 
     fun tags(tags: TripTags, now: Long) {
-        val doorOpened = tags.companion && !scene.companion
+        val frontOpened = tags.companion && !scene.companion
+        val rearOpened = tags.family && !scene.family
         scene = tags
         // A door opened on the road is not a passenger: only the weather and the time of day add up while driving.
-        if (gear == Gear.DRIVE) accumulated += tags.copy(companion = false)
-        if (!doorOpened || gear == Gear.DRIVE) return
+        if (gear == Gear.DRIVE) accumulated += tags.copy(companion = false, family = false)
+        if (!(frontOpened || rearOpened) || gear == Gear.DRIVE) return
         val current = arrival
         if (current != null && gear == Gear.PARK && now - arrivalTime in 0..EXIT_MS) {
-            // Someone getting out right after the arrival rode along: confirm 둘이서 on this ticket.
-            if (!current.tags.companion) {
-                val updated = current.copy(tags = current.tags + TripTags(companion = true))
+            // Someone getting out right after the arrival rode along: confirm 둘이서 (or 가족과) on this ticket.
+            val rode = TripTags(companion = frontOpened, family = rearOpened)
+            if (current.tags + rode != current.tags) {
+                val updated = current.copy(tags = current.tags + rode)
                 if (profile.updateTags(updated)) arrival = updated else storageFailed = true
             }
         } else {
             boardedAt = now
+            if (rearOpened) boardedFamily = true
         }
     }
 
@@ -87,6 +99,7 @@ class TripEngine(private val profile: Profile, private val cities: List<City>) {
         arrival = result
         arrivalTime = now
         companionAboard = false
+        familyAboard = false
         return result
     }
 

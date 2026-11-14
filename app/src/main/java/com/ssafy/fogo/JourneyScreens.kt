@@ -426,9 +426,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         }
         val list = ui.column()
         gift.addView(list, LinearLayout.LayoutParams(0, -2, 1f))
-        // The trip's 상황 태그 (wiper → 비, low beam or evening → 밤, passenger door → 둘이서) ride on the arrival line
+        // The trip's 상황 태그 (wiper → 비, low beam or evening → 밤, passenger door → 둘이서, rear door → 가족과) ride on the arrival line
         // since the Figma T1 fields gave TRIP's slot to BLOCKS. No tag means nothing observed, so no "맑은 날" here.
-        val situation = arrival.tags.takeIf { it.rain || it.night || it.companion }?.summary()
+        val situation = arrival.tags.takeIf { it.rain || it.night || it.together }?.summary()
         val headline = if (rewards.isEmpty()) "${city.spot} 도착 · 이미 받은 곳이에요" else "${city.spot} 도착"
         list.addView(ui.label(listOfNotNull(headline, situation).joinToString(" · "), 16f, c.muted))
         val chipRow = ui.row()

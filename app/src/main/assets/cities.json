@@ -23,7 +23,8 @@
     "description": "바다와 호수가 이어지는 경포에서 강릉의 첫 도착을 기록해요.",
     "weather": "rain",
     "night": false,
-    "companion": true,
+    "companion": false,
+    "family": true,
     "route": [
       [
         37.755,

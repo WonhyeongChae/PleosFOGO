@@ -170,9 +170,10 @@ class FogoApplication : Application() {
         redraw?.invoke()
     }
 
-    fun updateVehicleTags(rain: Boolean? = null, night: Boolean? = null, companion: Boolean? = null) {
+    fun updateVehicleTags(rain: Boolean? = null, night: Boolean? = null, companion: Boolean? = null,
+                          family: Boolean? = null) {
         realTags = realTags.copy(rain = rain ?: realTags.rain, night = night ?: realTags.night,
-            companion = companion ?: realTags.companion)
+            companion = companion ?: realTags.companion, family = family ?: realTags.family)
         if (replayCity != null) return
         applyLiveTags()
     }
@@ -214,9 +215,9 @@ class FogoApplication : Application() {
         ambientStatus = null
         replayHandler.postDelayed({
             val now = System.currentTimeMillis()
-            // A passenger gets in before the departure: the passenger door opens and closes.
-            if (city.companion) trip.tags(TripTags(city.rain, city.night, true), now)
-            trip.tags(TripTags(city.rain, city.night, false), now)
+            // Passengers get in before the departure: the passenger door (or a rear door for 가족과) opens and closes.
+            if (city.companion || city.family) trip.tags(TripTags(city.rain, city.night, city.companion, city.family), now)
+            trip.tags(TripTags(city.rain, city.night), now)
             trip.gear(Gear.DRIVE, now)
             redraw?.invoke()
         }, 350)

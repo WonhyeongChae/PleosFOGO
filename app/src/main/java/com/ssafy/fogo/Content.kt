@@ -51,6 +51,7 @@ data class City(
     val rain: Boolean,
     val night: Boolean,
     val companion: Boolean,
+    val family: Boolean,
     val route: List<Point>,
 ) {
     val provinceId get() = materialId.removePrefix("MAT_")
@@ -72,6 +73,7 @@ fun loadCities(context: Context): List<City> {
             row.getString("speech"), row.getString("audio"),
             List(nearby.length()) { nearby.getString(it) }, row.getString("description"),
             row.getString("weather") == "rain", row.getBoolean("night"), row.getBoolean("companion"),
+            row.optBoolean("family"),
             List(route.length()) { offset ->
                 val pair = route.getJSONArray(offset)
                 Point(pair.getDouble(0), pair.getDouble(1))
@@ -82,9 +84,18 @@ fun loadCities(context: Context): List<City> {
 
 data class Destination(val name: String, val point: Point)
 data class Fix(val point: Point, val time: Long)
-data class TripTags(val rain: Boolean = false, val night: Boolean = false, val companion: Boolean = false) {
-    operator fun plus(other: TripTags) = TripTags(rain || other.rain, night || other.night, companion || other.companion)
-    fun summary() = listOfNotNull("비 오는 날".takeIf { rain }, "밤".takeIf { night }, "둘이서".takeIf { companion })
+/** companion: the front passenger door (둘이서); family: a rear door (가족과), which wins over 둘이서. */
+data class TripTags(
+    val rain: Boolean = false,
+    val night: Boolean = false,
+    val companion: Boolean = false,
+    val family: Boolean = false,
+) {
+    val together get() = companion || family
+    operator fun plus(other: TripTags) = TripTags(rain || other.rain, night || other.night,
+        companion || other.companion, family || other.family)
+    fun summary() = listOfNotNull("비 오는 날".takeIf { rain }, "밤".takeIf { night },
+        if (family) "가족과" else "둘이서".takeIf { companion })
         .joinToString(" · ").ifBlank { "맑은 날" }
 }
 

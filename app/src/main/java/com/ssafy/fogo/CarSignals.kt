@@ -87,15 +87,25 @@ class CarSignals(private val app: FogoApplication) {
         app.updateGear(gear)
     }
 
+    /** Front passenger door → 둘이서; either rear door → 가족과. */
     private fun subscribeDoor(sdk: Vehicle) = runCatching {
-        val area = DoorArea(DoorValue.ROW_1_RIGHT)
         val door = sdk.getDoor()
-        fun state(position: Int?) { app.handler.post { app.updateVehicleTags(companion = (position ?: 0) > 0) } }
-        door.registerDoorPosition(area, object : DoorPositionListener {
-            override fun onPositionUpdated(pos: Int?) = state(pos)
-            override fun onFailed(e: Exception) = log(e)
-        })
-        door.getCurrentDoorPosition(area, ::state, ::log)
+        val rearOpen = mutableSetOf<String>()
+        fun watch(area: DoorArea, state: (Boolean) -> Unit) = runCatching {
+            fun update(position: Int?) { app.handler.post { state((position ?: 0) > 0) } }
+            door.registerDoorPosition(area, object : DoorPositionListener {
+                override fun onPositionUpdated(pos: Int?) = update(pos)
+                override fun onFailed(e: Exception) = log(e)
+            })
+            door.getCurrentDoorPosition(area, ::update, ::log)
+        }.onFailure(::log)
+        watch(DoorArea(DoorValue.ROW_1_RIGHT)) { open -> app.updateVehicleTags(companion = open) }
+        fun rear(side: String, area: DoorArea) = watch(area) { open ->
+            if (open) rearOpen += side else rearOpen -= side
+            app.updateVehicleTags(family = rearOpen.isNotEmpty())
+        }
+        rear("left", DoorArea(DoorValue.ROW_2_LEFT))
+        rear("right", DoorArea(DoorValue.ROW_2_RIGHT))
     }.onFailure(::log)
 
     /** 누적 주행거리 (km) for 차 생일 (permission CAR_DRIVE); Virtual Console's Odometer card publishes it on the emulator. */
