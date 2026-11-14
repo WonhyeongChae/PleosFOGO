@@ -26,11 +26,20 @@ class IntroSplash(host: MainActivity, private val onStart: () -> Unit) : FrameLa
     private val button = NeonStartButton(host, host.ui)
     private val reveal = Runnable { showStart() }
     private var shown = false
+    private var finished = false
+    /** Playback position to restore after the window was hidden, or -1. */
+    private var resumeAt = -1
+    private var endOnPrepared = false
 
     init {
         setBackgroundColor(BACKGROUND)
         addView(video, LayoutParams(-1, -1, Gravity.CENTER))
-        button.visibility = View.INVISIBLE
+        // Kept VISIBLE (transparent, untouchable, hidden from accessibility) rather than INVISIBLE: a view that
+        // turns visible later over the VideoView's surface was never composited, so the button stayed unseen
+        // although it could be tapped. Being in the layout from the start keeps its area out of the surface hole.
+        button.alpha = 0f
+        button.isClickable = false
+        button.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         button.setOnClickListener { if (shown) onStart() }
         addView(button, LayoutParams(host.ui.fx(620), host.ui.fx(156), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
             .apply { bottomMargin = host.ui.fx(40) })
@@ -38,7 +47,12 @@ class IntroSplash(host: MainActivity, private val onStart: () -> Unit) : FrameLa
         setOnClickListener { showStart() }
         // Silent clip: never take audio focus from the car's radio or navigation prompts.
         video.setAudioFocusRequest(AudioManager.AUDIOFOCUS_NONE)
-        video.setOnCompletionListener { showStart() }
+        video.setOnCompletionListener { finished = true; showStart() }
+        // VideoView.seekTo lands on the previous key frame (half-drawn map); rest on the exact last frame instead.
+        video.setOnPreparedListener { player ->
+            if (endOnPrepared) player.seekTo(END_FRAME_MS.toLong(), android.media.MediaPlayer.SEEK_CLOSEST)
+            endOnPrepared = false
+        }
         video.setOnErrorListener { _, _, _ ->
             fallbackLogo(host)
             showStart()
@@ -68,9 +82,28 @@ class IntroSplash(host: MainActivity, private val onStart: () -> Unit) : FrameLa
             translationY = height.coerceAtLeast(1) * .6f
             scaleX = .85f
             scaleY = .85f
-            visibility = View.VISIBLE
+            isClickable = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
             animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
                 .setDuration(420).setInterpolator(OvershootInterpolator(2.2f)).start()
+        }
+    }
+
+    /**
+     * Another app over FOGO (navi, a call) destroys the video surface and VideoView drops its target state,
+     * so coming back used to show a black screen. Remember the spot when hidden and pick up from it when shown;
+     * a clip that already ended rests on its last frame.
+     */
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility != View.VISIBLE) {
+            if (resumeAt < 0) resumeAt = if (finished) END_FRAME_MS else video.currentPosition
+        } else if (resumeAt >= 0) {
+            if (finished) endOnPrepared = true else {
+                video.seekTo(resumeAt)
+                video.start()
+            }
+            resumeAt = -1
         }
     }
 
@@ -84,6 +117,8 @@ class IntroSplash(host: MainActivity, private val onStart: () -> Unit) : FrameLa
         /** Same navy as the first and last video frame, so the clip has no visible edge. */
         const val BACKGROUND = 0xff0a0f1e.toInt()
         private const val REVEAL_AFTER_MS = 11_000L
+        /** Just before the 11.5 s clip ends: the finished map and magnets. */
+        private const val END_FRAME_MS = 11_400
     }
 }
 
