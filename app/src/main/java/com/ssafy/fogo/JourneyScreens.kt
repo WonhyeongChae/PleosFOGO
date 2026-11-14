@@ -203,8 +203,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
                 setPadding(ui.fx(6), ui.fx(4), ui.fx(6), ui.fx(4))
                 setOnClickListener { regionId = item.id; host.go(Page.REGION) }
             }
-            // Figma rows sit 53 px apart; every piece stays on one line.
-            panel.addView(row, LinearLayout.LayoutParams(-1, ui.fx(53)).apply { topMargin = ui.fx(2) })
+            // Each row opens its 시·도, so it is a touch target: 76 (the Android Automotive minimum) rather than
+            // Figma's 53, agreed with the designer. Every piece stays on one line.
+            panel.addView(row, LinearLayout.LayoutParams(-1, ui.fx(TAB)).apply { topMargin = ui.fx(2) })
             row.addView(ui.label(item.name, 17f, bold = true).apply { maxLines = 1 }, LinearLayout.LayoutParams(ui.fx(72), -2))
             val meter = ui.column()
             row.addView(meter, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.fx(12) })
