@@ -59,7 +59,7 @@ def main():
         return next((node for node in matching if node.get("clickable") == "true" and node.get("enabled") != "false"),
                     next(iter(matching), None))
 
-    def wait_for(needle, timeout=15, attribute="text"):
+    def wait_for(needle, timeout=20, attribute="text"):
         end = time.monotonic() + timeout
         last = []
         while time.monotonic() < end:
@@ -94,7 +94,7 @@ def main():
     user = shell("am", "get-current-user").strip()
     assert shell("pm", "clear", "--user", user, package).strip() == "Success"
     launch()
-    tap("시작하기")
+    tap("시작하기")  # 오프닝 영상이 끝나면(약 11초) 나타나는 네온 버튼
     tap("기록 없이 둘러보기")
     tap("이 친구로 시작")
     wait_for("지역별 진행")
@@ -152,6 +152,7 @@ def main():
 
     shell("am", "force-stop", "--user", user, package)
     launch()
+    tap("시작하기")  # 오프닝 영상 뒤 시작하기 → 온보딩을 마친 기록이라 바로 아틀라스
     tap("차고")
     wait_for("그랜저")
     wait_for("구름 목도리")
