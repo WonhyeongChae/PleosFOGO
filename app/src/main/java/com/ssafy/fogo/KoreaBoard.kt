@@ -162,8 +162,10 @@ class KoreaBoard(
         // the last look are whole (all of them the first time), leaving the user's own pan alone otherwise.
         if (base > 0f && pick == null) {
             // By item, not tile: neighbouring blocks share a tile, so a new sticker may land on an occupied one.
-            keepInView(placed.filter { (_, item) -> item.id !in view.seen }.keys.mapNotNull { parse(it)?.let { block -> cellOf(block) } })
-            view.seen += placed.values.map { it.id }
+            // Keyed by item and block, so a sticker moved to another block counts as new and is brought into view too.
+            keepInView(placed.filter { (block, item) -> "${item.id}@$block" !in view.seen }.keys
+                .mapNotNull { parse(it)?.let { block -> cellOf(block) } })
+            view.seen += placed.map { (block, item) -> "${item.id}@$block" }
         }
         clampCenter()
     }
@@ -384,7 +386,7 @@ class KoreaBoard(
         canvas.drawText(label, pad * 2, y + h * .66f, text)
     }
 
-    /** [seen]: placed items already brought into view, so a pan the user made is kept until a new one is placed. */
+    /** [seen]: placements (item@block) already brought into view; a pan the user made is kept until one is added or moved. */
     private class ViewState(var zoom: Float, var x: Float, var y: Float, val seen: MutableSet<String> = mutableSetOf())
     private data class Cell(val column: Int, val row: Int)
 
