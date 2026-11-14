@@ -121,6 +121,18 @@ class AtlasProfileTest {
         assertEquals("그랜저", Profile(context, key).car)
     }
 
+    @Test fun previousStopFollowsVisitOrderEvenOnTheSameDay() {
+        val profile = Profile(context, key)
+        val (a, b, c) = cities.take(3)
+        listOf(a, b, c).forEach { city ->
+            assertTrue(profile.arrive(Arrival(city, true, true, "2026-11-14", TripTags()), city.point.block()))
+        }
+        val reloaded = Profile(context, key)
+        assertNull(reloaded.visitedBefore(a, cities))
+        assertEquals(a, reloaded.visitedBefore(b, cities))
+        assertEquals(b, reloaded.visitedBefore(c, cities))
+    }
+
     @Test fun datedBoardUsesMonthBoundariesAndCountsAStickerOnce() {
         val city = cities.first()
         val profile = Profile(context, key)

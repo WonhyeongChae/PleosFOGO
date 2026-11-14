@@ -65,6 +65,11 @@ class FogoApplication : Application() {
         speech = ArrivalSpeech(this, sdk)
         car = CarSignals(this)
         car.connect()
+        // Night (19시–6시) was only re-evaluated when a vehicle signal changed, so the theme stayed 주간 and a trip
+        // arriving after 19:00 missed its 밤 tag. The minute tick re-checks; applyLiveTags redraws only on a change.
+        registerReceiver(object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context, intent: Intent) = applyLiveTags()
+        }, android.content.IntentFilter(Intent.ACTION_TIME_TICK))
     }
 
     fun refreshDestination() {

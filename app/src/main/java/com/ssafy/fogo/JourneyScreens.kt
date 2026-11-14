@@ -393,8 +393,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             code = "FG-" + arrival.day.filter(Char::isDigit).takeLast(8)))
         val panel = pass.body
         // FROM (last place reached before this one) ····· TO region, then the OPEN chip, as in Figma T1.
-        val from = fogo.cities.filter { it.spotId != city.spotId && profile.visited(it) }
-            .maxByOrNull { profile.visitDate(it) ?: "" }?.region
+        val from = profile.visitedBefore(city, fogo.cities)?.region
         val route = ui.row().apply { gravity = Gravity.BOTTOM }
         panel.addView(route, LinearLayout.LayoutParams(-1, -2))
         if (from != null) {

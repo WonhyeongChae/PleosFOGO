@@ -48,6 +48,16 @@ class Profile(context: Context, preferenceName: String = "fogo_profile") {
     fun stickerBlock(city: City) = placements[city.stickerId]
     fun visitDate(city: City): String? = entries("spots").optJSONObject(city.spotId)?.optString("day")
     fun visitTags(city: City): String? = entries("spots").optJSONObject(city.spotId)?.optString("tags")
+
+    /**
+     * The spot reached just before [city]: "spots" keeps first visits in the order they happened. Picking the latest
+     * visit date tied on same-day visits and always returned the first city in the list (FROM 강릉 on every ticket).
+     */
+    fun visitedBefore(city: City, cities: List<City>): City? {
+        val order = entries("spots").keys().asSequence().toList()
+        val previous = order.indexOf(city.spotId).let { if (it < 0) order.lastOrNull() else order.getOrNull(it - 1) }
+        return cities.firstOrNull { it.spotId == previous }
+    }
     fun newBlocksToday(day: LocalDate = LocalDate.now()) =
         entries("blockDays").let { table -> table.keys().asSequence().count { table.optString(it) == day.toString() } }
 
