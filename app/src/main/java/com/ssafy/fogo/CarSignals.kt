@@ -8,6 +8,7 @@ import ai.pleos.playground.vehicle.constant.area.DoorValue
 import ai.pleos.playground.vehicle.constant.area.WindowValue
 import ai.pleos.playground.vehicle.constant.control.LightState
 import ai.pleos.playground.vehicle.constant.control.WiperState
+import ai.pleos.playground.vehicle.listener.DistanceDrivenListener
 import ai.pleos.playground.vehicle.listener.DoorPositionListener
 import ai.pleos.playground.vehicle.listener.LightStateListener
 import ai.pleos.playground.vehicle.listener.WiperStateListener
@@ -55,6 +56,7 @@ class CarSignals(private val app: FogoApplication) {
             subscribeDoor(sdk)
             subscribeWiper(sdk)
             subscribeLights(sdk)
+            subscribeOdometer(sdk)
         }.onFailure(::log)
     }
 
@@ -94,6 +96,17 @@ class CarSignals(private val app: FogoApplication) {
             override fun onFailed(e: Exception) = log(e)
         })
         door.getCurrentDoorPosition(area, ::state, ::log)
+    }.onFailure(::log)
+
+    /** 누적 주행거리 (km) for 차 생일 (permission CAR_DRIVE); Virtual Console's Odometer card publishes it on the emulator. */
+    private fun subscribeOdometer(sdk: Vehicle) = runCatching {
+        val odometer = sdk.getOdometer()
+        fun state(km: Float?) { if (km != null) app.handler.post { app.updateOdometer(km.toDouble()) } }
+        odometer.registerDistanceDriven(object : DistanceDrivenListener {
+            override fun onDistanceDrivenUpdated(value: Float?) = state(value)
+            override fun onFailed(e: Exception) = log(e)
+        })
+        odometer.getCurrentDistanceDriven(::state, ::log)
     }.onFailure(::log)
 
     private fun subscribeWiper(sdk: Vehicle) = runCatching {

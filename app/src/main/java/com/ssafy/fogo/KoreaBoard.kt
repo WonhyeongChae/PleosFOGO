@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.SystemClock
+import android.animation.ValueAnimator
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
@@ -20,10 +22,15 @@ import kotlin.math.hypot
  * Whole-country pixel board (Figma A1 지도 / A2 내 지도판 / A3 스티커 붙이기): South Korea as a grid
  * of [CELL_KM] tiles.
  *
- * - Figma look: the whole board is a grid of big square pixels. Sea tiles are pale blue, fog (unvisited)
- *   land is neutral grey with a dot, and a tile with an opened 1 km block is the flat, bright colour of
- *   its 시·도 (17 zones; 특별·광역시 a shade of the surrounding 도). No coast line; hairline 시·도 borders
- *   always, names only when zoomed in.
+ * - Figma look: the whole board is a grid of big square pixels. The sea is open blue water. Land not
+ *   visited yet lies under an opaque pixel cloud (three close shades, still), which thins next to opened
+ *   tiles, so the fog visibly lifts around where the car has been.
+ * - Fog lifting: tiles that gained 1 km blocks since any board was last shown (a drive, an arrival) are fogged
+ *   again and lose the fog pixel by pixel, one after another in the order the blocks were opened (the route),
+ *   then flash once. Already opened tiles count too, so a drive through a known region still shows what it cleared. Shared by every board and
+ *   kept across re-renders; nothing plays on the first launch or with animations turned off. A tile with an opened 1 km block
+ *   is the flat, bright colour of its 시·도 (17 zones; 특별·광역시 a shade of the surrounding 도) with a
+ *   pixel bevel. No coast line; hairline 시·도 borders, names only when zoomed in.
  * - Pinch, drag and the +/- buttons zoom and pan. The zoom of each [key] survives re-renders.
  * - Stickers / magnets sit on the tile that holds their block as tilted tiles.
  * - When [pick] is set (placement) every tappable opened tile gets a small view ("열린 칸") so it works
@@ -51,6 +58,8 @@ class KoreaBoard(
     private val key: String = "board",
     /** Zoom buttons at the top-right corner, or halfway down the right edge when the corner is taken. */
     private val controlsAtTop: Boolean = true,
+    /** Lift the fog over my newly opened tiles; off for boards that are not my own record (a friend's). */
+    reveal: Boolean = true,
 ) : FrameLayout(context) {
     private val colors = ui.colors
     private val paint = Paint()
@@ -74,6 +83,14 @@ class KoreaBoard(
     private val targets = mutableListOf<Pair<Cell, View>>()
     private val zoomIn: TextView
     private val zoomOut: TextView
+    /** Tiles whose fog starts lifting with this board (new blocks since a board was last shown); panned into view. */
+    private val fresh: List<Cell> = if (reveal) startReveal(context, open) else emptyList()
+    private val tick = object : Runnable {
+        override fun run() {
+            invalidate()
+            if (REVEALING.isNotEmpty()) postDelayed(this, REVEAL_FRAME_MS)
+        }
+    }
 
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private var downX = 0f
@@ -164,7 +181,7 @@ class KoreaBoard(
             // By item, not tile: neighbouring blocks share a tile, so a new sticker may land on an occupied one.
             // Keyed by item and block, so a sticker moved to another block counts as new and is brought into view too.
             keepInView(placed.filter { (block, item) -> "${item.id}@$block" !in view.seen }.keys
-                .mapNotNull { parse(it)?.let { block -> cellOf(block) } })
+                .mapNotNull { parse(it)?.let { block -> cellOf(block) } } + fresh)
             view.seen += placed.map { (block, item) -> "${item.id}@$block" }
         }
         clampCenter()
@@ -229,17 +246,53 @@ class KoreaBoard(
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (REVEALING.isNotEmpty()) post(tick)
+    }
+
+    /**
+     * Compares the opened blocks with those of the last board shown and queues the tiles holding new ones, in the
+     * order the blocks were opened (a drive's route). The first board ever shown (or with animations off) only records.
+     */
+    private fun startReveal(context: Context, open: Set<String>): List<Cell> {
+        val store = context.getSharedPreferences(REVEAL_PREFS, Context.MODE_PRIVATE)
+        val known = store.getStringSet(REVEAL_KEY, null)
+        if (known == open) return emptyList()
+        store.edit().putStringSet(REVEAL_KEY, HashSet(open)).apply()
+        if (known == null || !ValueAnimator.areAnimatorsEnabled()) return emptyList()
+        val added = open.asSequence().filter { it !in known }.mapNotNull { parse(it)?.let(::cellOf) }
+            .distinct().filter { it in cells && it !in REVEALING }.toList()
+        if (added.isEmpty()) return emptyList()
+        val now = SystemClock.uptimeMillis()
+        val step = minOf(REVEAL_STAGGER_MS, REVEAL_SPREAD_MS / added.size)
+        added.forEachIndexed { index, tile -> REVEALING[tile] = now + REVEAL_DELAY_MS + index * step }
+        return added
+    }
+
+    /** 0 → still fogged, 1 → clear; above 1 while the finishing flash plays. Null when not lifting. */
+    private fun revealProgress(tile: Cell, now: Long): Float? =
+        REVEALING[tile]?.let { (now - it).toFloat() / REVEAL_MS }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(tick)
+        super.onDetachedFromWindow()
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (cell <= 0f) return
         val night = colors.night
-        val line = if (night) 0xff0f1a28.toInt() else 0xffc3d3e2.toInt()
-        val sea = if (night) 0xff1a2b40.toInt() else 0xffd3e5f5.toInt()
-        val fog = if (night) 0xff2c3038.toInt() else 0xffe6e8ec.toInt()
-        val dot = if (night) 0xff3b404b.toInt() else 0xffc8ccd3.toInt()
+        // Open water: a clear blue with a few wave pixels, so the land under the fog keeps its shape.
+        val sea = if (night) 0xff10263d.toInt() else 0xff6f9cc6.toInt()
+        val wave = if (night) 0xff1b3858.toInt() else 0xff8bb3d8.toInt()
+        // Fog: an opaque pixel cloud, darkest to lightest.
+        val fogShades = if (night) NIGHT_FOG else DAY_FOG
         val border = if (night) 0xccd6deea.toInt() else 0xb30b1426.toInt()
-        // Grid lines are the background showing between tiles.
-        canvas.drawColor(line)
+        // Under the fog the 시·도 borders are only a hint, so the cloud reads as one sheet.
+        val fogBorder = if (night) 0x40d6deea else 0x2a0b1426
+        canvas.drawColor(sea)
         val gap = maxOf(1f, cell / 20f)
+        val now = SystemClock.uptimeMillis()
         val first = floor(-originX / cell).toInt()
         val last = ceil((width - originX) / cell).toInt()
         val firstRow = floor(-originY / cell).toInt()
@@ -251,29 +304,45 @@ class KoreaBoard(
             val y = originY + row * cell
             val zone = zoneAt(column, row)
             if (zone == null) {
-                paint.color = sea
-                canvas.drawRect(x, y, x + cell - gap, y + cell - gap, paint)
+                if (noise(column, row) % 9 == 0) {
+                    paint.color = wave
+                    canvas.drawRect(x + cell * .2f, y + cell * .45f, x + cell * .6f, y + cell * .55f, paint)
+                }
                 continue
             }
             val tile = Cell(column, row)
+            val opened = cells.containsKey(tile)
             when {
-                tile == pendingCell -> paint.color = colors.lime
-                cells.containsKey(tile) -> paint.color = shade(ZONE_COLORS.getValue(zone), if (night) .9f else 1f)
-                else -> paint.color = fog
-            }
-            canvas.drawRect(x, y, x + cell - gap, y + cell - gap, paint)
-            if (tile != pendingCell && !cells.containsKey(tile)) {
-                paint.color = dot
-                val d = cell / 12f
-                canvas.drawRect(x + cell / 2 - d, y + cell / 2 - d, x + cell / 2 + d, y + cell / 2 + d, paint)
+                tile == pendingCell -> {
+                    paint.color = colors.lime
+                    canvas.drawRect(x, y, x + cell - gap, y + cell - gap, paint)
+                }
+                opened -> {
+                    // Pixel bevel: a darker cell under the flat 시·도 colour, so opened land looks raised out of the fog.
+                    val color = shade(ZONE_COLORS.getValue(zone), if (night) .9f else 1f)
+                    paint.color = shade(color, .78f)
+                    canvas.drawRect(x, y, x + cell, y + cell, paint)
+                    paint.color = color
+                    canvas.drawRect(x, y, x + cell - gap * 2, y + cell - gap * 2, paint)
+                    revealProgress(tile, now)?.let { lift(canvas, tile, x, y, it, fogShades) }
+                }
+                else -> {
+                    val level = cloud(column.toFloat(), row.toFloat())
+                    val index = if (level < .42f) 0 else if (level < .62f) 1 else 2
+                    val near = nearOpened(column, row, now)
+                    // Thin fog next to opened land: the 시·도 colour shows through, so the fog lifts at the edge.
+                    paint.color = if (near) blend(ZONE_COLORS.getValue(zone), fogShades[2], if (night) .82f else .8f)
+                        else fogShades[index]
+                    canvas.drawRect(x, y, x + cell, y + cell, paint)
+                }
             }
             // Hairline 시·도 borders at every zoom.
             run {
-                paint.color = border
+                paint.color = if (opened || tile == pendingCell) border else fogBorder
                 val up = zoneAt(column, row - 1)
                 val left = zoneAt(column - 1, row)
-                if (up != null && up != zone) canvas.drawRect(x, y - gap / 2 - thin / 2, x + cell, y - gap / 2 + thin / 2, paint)
-                if (left != null && left != zone) canvas.drawRect(x - gap / 2 - thin / 2, y, x - gap / 2 + thin / 2, y + cell, paint)
+                if (up != null && up != zone) canvas.drawRect(x, y - thin / 2, x + cell, y + thin / 2, paint)
+                if (left != null && left != zone) canvas.drawRect(x - thin / 2, y, x + thin / 2, y + cell, paint)
             }
             if (tile == pendingCell) {
                 paint.color = colors.dark
@@ -309,6 +378,32 @@ class KoreaBoard(
             bubble(canvas, pendingCell)
         }
         if (pick != null) hint(canvas)
+        REVEALING.entries.removeAll { (now - it.value).toFloat() / REVEAL_MS >= REVEAL_END }
+    }
+
+    /**
+     * Fog over a tile that is lifting: a grid of fog pixels that vanish one by one at their own moment
+     * (each glows white just before it goes), then a lime outline that fades.
+     */
+    private fun lift(canvas: Canvas, tile: Cell, x: Float, y: Float, progress: Float, fogShades: IntArray) {
+        if (progress < 1f) {
+            val parts = if (cell >= 40f) 5 else 3
+            val size = cell / parts
+            for (j in 0 until parts) for (i in 0 until parts) {
+                val at = .05f + .85f * noise(tile.column * 11 + i, tile.row * 13 + j) / 65535f
+                if (progress >= at) continue
+                paint.color = if (progress > at - .12f) fogShades[3] else fogShades[1 + (i + j) % 2]
+                canvas.drawRect(x + i * size, y + j * size, x + (i + 1) * size, y + (j + 1) * size, paint)
+            }
+        } else {
+            val fade = ((REVEAL_END - progress) / (REVEAL_END - 1f)).coerceIn(0f, 1f)
+            paint.color = (colors.lime and 0x00ffffff) or ((fade * 255).toInt() shl 24)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = maxOf(2f, cell / 12f)
+            val inset = paint.strokeWidth / 2
+            canvas.drawRect(x + inset, y + inset, x + cell - inset, y + cell - inset, paint)
+            paint.style = Paint.Style.FILL
+        }
     }
 
     /**
@@ -384,6 +479,14 @@ class KoreaBoard(
         paint.color = 0xe644464e.toInt()
         canvas.drawRoundRect(box.apply { set(pad, y, pad + w, y + h) }, h / 2, h / 2, paint)
         canvas.drawText(label, pad * 2, y + h * .66f, text)
+    }
+
+    private fun nearOpened(column: Int, row: Int, now: Long): Boolean {
+        // Edge neighbours only: diagonal ones would thin most of the fog where routes criss-cross.
+        // A lifting neighbour thins this fog only once it is mostly clear, so the edge follows the reveal.
+        fun clear(tile: Cell) = cells.containsKey(tile) && (revealProgress(tile, now) ?: 1f) >= .6f
+        return clear(Cell(column - 1, row)) || clear(Cell(column + 1, row)) ||
+            clear(Cell(column, row - 1)) || clear(Cell(column, row + 1))
     }
 
     /** [seen]: placements (item@block) already brought into view; a pan the user made is kept until one is added or moved. */
@@ -497,6 +600,53 @@ class KoreaBoard(
             val best = tiles.maxWith(compareBy<Pair<Int, Int>> { minOf(depth(it.first, it.second), 3) }
                 .thenByDescending { (it.first - cx) * (it.first - cx) + (it.second - cy) * (it.second - cy) })
             Triple(name, best.first + .5f, best.second + .5f)
+        }
+
+        /** Tiles lifting their fog → when they start (uptime ms). Shared by every board, so re-renders keep it going. */
+        private val REVEALING = mutableMapOf<Cell, Long>()
+        private const val REVEAL_PREFS = "fogo_board"
+        private const val REVEAL_KEY = "shownBlocks"
+        private const val REVEAL_FRAME_MS = 33L
+        /** Wait for the screen to settle before the first tile starts. */
+        private const val REVEAL_DELAY_MS = 700L
+        /** One tile's fog takes this long to lift; the next starts [REVEAL_STAGGER_MS] later. */
+        private const val REVEAL_MS = 1500L
+        private const val REVEAL_STAGGER_MS = 400L
+        /** All starts fit in this window however many tiles opened. */
+        private const val REVEAL_SPREAD_MS = 2400L
+        /** Progress at which the finishing flash is gone. */
+        private const val REVEAL_END = 1.5f
+        /** Cloud shades, darkest to lightest, then the white of fog about to lift. */
+        private val DAY_FOG = intArrayOf(0xffd8dde4.toInt(), 0xffe3e7ec.toInt(), 0xffedeff3.toInt(), 0xffffffff.toInt())
+        private val NIGHT_FOG = intArrayOf(0xff394150.toInt(), 0xff404858.toInt(), 0xff475061.toInt(), 0xff8a94a6.toInt())
+
+        private fun noise(column: Int, row: Int): Int {
+            var n = column * 374761393 + row * 668265263
+            n = (n xor (n ushr 13)) * 1274126177
+            return (n xor (n ushr 16)) and 0xffff
+        }
+
+        /** Smooth value noise in 0..1 with a finer second layer: soft cloud shapes a few tiles across. */
+        private fun cloud(x: Float, y: Float): Float {
+            fun layer(px: Float, py: Float): Float {
+                val x0 = floor(px).toInt()
+                val y0 = floor(py).toInt()
+                val fx = px - x0
+                val fy = py - y0
+                val u = fx * fx * (3 - 2 * fx)
+                val v = fy * fy * (3 - 2 * fy)
+                fun h(i: Int, j: Int) = noise(i, j) / 65535f
+                val a = h(x0, y0) + (h(x0 + 1, y0) - h(x0, y0)) * u
+                val b = h(x0, y0 + 1) + (h(x0 + 1, y0 + 1) - h(x0, y0 + 1)) * u
+                return a + (b - a) * v
+            }
+            return layer(x / 3.2f, y / 2.4f) * .65f + layer(x / 1.4f + 17f, y / 1.2f + 5f) * .35f
+        }
+
+        /** [a] mixed toward [b] by [amount] (0 = a, 1 = b), opaque. */
+        private fun blend(a: Int, b: Int, amount: Float): Int {
+            fun channel(shift: Int) = ((a shr shift and 0xff) * (1 - amount) + (b shr shift and 0xff) * amount).toInt()
+            return (0xff shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
         }
 
         private fun shade(color: Int, factor: Float): Int {

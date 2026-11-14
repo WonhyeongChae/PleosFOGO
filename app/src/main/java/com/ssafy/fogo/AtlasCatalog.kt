@@ -43,11 +43,14 @@ class AtlasCatalog(context: Context, cities: List<City>) {
 
     val boardItems = cities.distinctBy(City::stickerId).map {
         BoardItem(it.stickerId, "${it.region} 스티커", it.color, false)
-    } + regions.map(AtlasRegion::magnet)
+    } + listOf(
+        BoardItem(Profile.COMMUTE_STICKER, "출퇴근 스티커", Color.parseColor("#7C9CFF"), false),
+        BoardItem(Profile.BIRTHDAY_STICKER, "차 생일 스티커", Color.parseColor("#FF8FB1"), false),
+    ) + regions.map(AtlasRegion::magnet)
 
     fun mascotUnlocked(mascot: Mascot, profile: Profile) = when (mascot.id) {
         "duck" -> regions.any { it.opened(profile) > 0 }
-        "dog" -> false
+        "dog" -> profile.commuteDone
         "cat" -> regions.any { profile.owns(it.magnet.id) }
         "capybara" -> regions.all { it.opened(profile) > 0 }
         else -> true

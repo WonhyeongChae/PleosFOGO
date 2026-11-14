@@ -1,0 +1,53 @@
+[
+  {
+    "id": "minji", "name": "민지네 가족", "code": "315920", "car": "그랜저", "mascot": "duck",
+    "equipped": {"hat": "CST_WHALE_HAT", "bg": "CST_SEA_BG"},
+    "spots": ["SPOT_BS_HAEUNDAE", "SPOT_BS_GWANGALLI", "SPOT_BS_TAEJONGDAE", "SPOT_GW_GYEONGPODAE"],
+    "trips": [
+      [[37.50, 127.03], [37.27, 127.10], [36.80, 127.15], [36.35, 127.40], [35.87, 128.60], [35.55, 129.05], [35.165, 129.105], [35.1587, 129.1604]],
+      [[35.165, 129.105], [35.1532, 129.1186], [35.10, 129.04], [35.0532, 129.085]],
+      [[37.55, 127.10], [37.48, 127.60], [37.43, 128.00], [37.70, 128.70], [37.7955, 128.8963]]
+    ],
+    "stickers": [
+      {"item": "STK_BS_HAEUNDAE", "at": [35.1587, 129.1604]},
+      {"item": "STK_GW_GANGNEUNG", "at": [37.7955, 128.8963]},
+      {"item": "MAG_BUSAN", "at": [35.1532, 129.1186]}
+    ],
+    "reaction": {"sticker": "가보고 싶어요", "about": "내 지도판"},
+    "monthly": {"부산": 18, "강원": 9, "경북": 7}
+  },
+  {
+    "id": "junho", "name": "준호", "code": "708142", "car": "아반떼", "mascot": "dog",
+    "equipped": {"wrap": "CST_LIME_WRAP"},
+    "spots": ["SPOT_SE_GYEONGBOKGUNG", "SPOT_SE_YEOUIDO", "SPOT_SE_LOTTETOWER", "SPOT_GW_JEONGDONGJIN"],
+    "trips": [
+      [[37.536, 126.944], [37.5796, 126.977], [37.5284, 126.9327], [37.5126, 127.1025]],
+      [[37.55, 127.10], [37.48, 127.60], [37.43, 128.00], [37.62, 128.75], [37.6916, 129.0339]],
+      [[37.40, 127.10], [36.80, 127.10], [36.30, 127.10], [35.82, 127.15]]
+    ],
+    "stickers": [
+      {"item": "STK_SE_JONGNO", "at": [37.5796, 126.977]},
+      {"item": "STK_SE_SONGPA", "at": [37.5126, 127.1025]},
+      {"item": "STK_GW_GANGNEUNG", "at": [37.6916, 129.0339]},
+      {"item": "MAG_SEOUL", "at": [37.5284, 126.9327]}
+    ],
+    "reaction": {"sticker": "나도 가 봤어요", "about": "강릉 스티커"},
+    "monthly": {"서울": 24, "전북": 11, "강원": 6}
+  },
+  {
+    "id": "jihun", "name": "지훈이네", "code": "520417", "car": "아반떼", "mascot": "capybara",
+    "equipped": {"clothes": "CST_CLOUD_SCARF"},
+    "spots": ["SPOT_GW_SHEEPFARM", "SPOT_GW_GYEONGPODAE", "SPOT_BS_HAEUNDAE"],
+    "trips": [
+      [[37.55, 127.10], [37.48, 127.60], [37.43, 128.00], [37.6884, 128.7506], [37.7955, 128.8963]],
+      [[33.50, 126.53], [33.25, 126.56], [33.39, 126.25], [33.50, 126.53]],
+      [[35.87, 128.60], [35.55, 129.05], [35.1587, 129.1604]]
+    ],
+    "stickers": [
+      {"item": "STK_GW_PYEONGCHANG", "at": [37.6884, 128.7506]},
+      {"item": "STK_BS_HAEUNDAE", "at": [35.1587, 129.1604]}
+    ],
+    "reaction": {"sticker": "좋아요", "about": "내 차고"},
+    "monthly": {"강원": 15, "제주": 12}
+  }
+]

@@ -159,12 +159,12 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         top.addView(head, LinearLayout.LayoutParams(-1, -2))
         tabsInto(head, "지도")
         head.addView(View(host), LinearLayout.LayoutParams(0, 1, 1f))
-        head.addView(ui.action("공유", height = TAB) { host.message("폰으로 보내기는 준비 중이에요") },
+        head.addView(ui.action("공유", height = TAB) { host.share("지도판 공유", host.boardSummary()) },
             LinearLayout.LayoutParams(ui.fx(140), -2))
         val counts = ui.row()
         top.addView(counts, LinearLayout.LayoutParams(-2, -2).apply { topMargin = ui.fx(22) })
-        counts.addView(ui.chip("블록 ${profile.blocks.size}", c.paper, 15f, pixel = true))
-        counts.addView(ui.chip("오늘 +${profile.newBlocksToday()}", c.lime, 15f, pixel = true),
+        counts.addView(ui.chip("걷힌 안개 ${profile.blocks.size}칸", c.paper, 15f, pixel = true))
+        counts.addView(ui.chip("오늘 +${profile.newBlocksToday()}칸 걷힘", c.lime, 15f, pixel = true),
             LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.fx(12) })
         val bar = ui.row().apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -225,8 +225,8 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             val panel = ui.card(left, c.fog)
             val counts = ui.row()
             panel.addView(counts, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(8) })
-            counts.addView(ui.chip("블록 ${profile.blocks.size}", c.paper, 13f, pixel = true))
-            counts.addView(ui.chip("오늘 +${profile.newBlocksToday()}", c.lime, 13f, pixel = true),
+            counts.addView(ui.chip("걷힌 안개 ${profile.blocks.size}칸", c.paper, 13f, pixel = true))
+            counts.addView(ui.chip("오늘 +${profile.newBlocksToday()}칸 걷힘", c.lime, 13f, pixel = true),
                 LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
             panel.addView(KoreaBoard(host, ui, host.art, profile.blocks, emptyMap(), key = "atlas").apply {
                 contentDescription = "안개 지도"
@@ -460,7 +460,11 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         // Figma T1: two buttons centred under the ticket, 공유 (white) + 지도판에 붙이기 (navy).
         val buttons = ui.row().apply { gravity = Gravity.CENTER }
         sheet.addView(buttons, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.fx(40) })
-        buttons.addView(ui.action("공유") { host.message("폰으로 보내기는 준비 중이에요") },
+        buttons.addView(ui.action("공유") {
+            host.share("탑승권 공유", "FOGO PASS · ${city.region} OPEN!\n" +
+                listOfNotNull("${arrival.day.replace('-', '.')} ${city.spot} 도착", situation).joinToString(" · ") +
+                "\n${profile.car} · ${profile.mascot}\n#FOGO #Pleos")
+        },
             LinearLayout.LayoutParams(ui.fx(260), -2))
         buttons.addView(ui.action("지도판에 붙이기", fill = c.navy) {
             focus(city)
@@ -503,7 +507,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         line.addView(panel, if (ui.wide) LinearLayout.LayoutParams(0, ui.fx(920), 508f).apply { marginStart = ui.fx(24) }
             else LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.fx(20) })
         ui.text(panel, "붙일 수 있는 것", 23f, bold = true)
-        ui.text(panel, "열린 블록이면 어디든 붙일 수 있어요", 16f, c.muted)
+        ui.text(panel, "안개가 걷힌 칸이면 어디든 붙일 수 있어요", 16f, c.muted)
         if (owned.isEmpty()) ui.text(panel, "첫 도착을 기록하면 스티커가 열려요.", 16f, c.muted)
         fun tile(item: BoardItem): View {
             val placed = stored.containsKey(item.id)
@@ -538,7 +542,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
         }
         panel.addView(View(host), if (ui.wide) LinearLayout.LayoutParams(1, 0, 1f) else LinearLayout.LayoutParams(1, ui.fx(20)))
         ui.actions(panel, listOf(
-            Act("공유") { host.message("폰으로 보내기는 준비 중이에요") },
+            Act("공유") { host.share("지도판 공유", host.boardSummary()) },
             Act("붙이기", enabled = owned.isNotEmpty(), fill = c.yellow) { startPlacement(null) }), topMargin = 0)
     }
 

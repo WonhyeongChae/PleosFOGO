@@ -22,10 +22,25 @@ class FogoApplication : Application() {
     lateinit var speech: ArrivalSpeech
         private set
     private lateinit var car: CarSignals
+    lateinit var friends: List<Friend>
+        private set
+    /** Sheets waiting for the next parked screen (차 생일, 출퇴근 완료, 친구 수락). */
+    val notices = ArrayDeque<Notice>()
+    /** Last odometer reading (km), null until the car reports one. */
+    var odometerKm: Double? = null
+        private set
+    private var lastPoint: Point? = null
+    private var lastPointAt = 0L
+    private var driveStart: Point? = null
+    private var commuteCheckUntil = 0L
+    /** The car's position if a fix came in the last two minutes (registering 집·회사). */
+    val currentPoint get() = lastPoint?.takeIf { System.currentTimeMillis() - lastPointAt < 120_000 }
     private lateinit var sdk: PlatformServices
     val handler = Handler(Looper.getMainLooper())
     private val replayHandler = Handler(Looper.getMainLooper())
     var redraw: (() -> Unit)? = null
+    /** Short on-screen line from the visible screen (toasts are hidden for the car user on Pleos Connect). */
+    var say: ((String) -> Unit)? = null
     var liveDestination: Destination? = null
         private set
     var replayCity: City? = null
@@ -63,6 +78,7 @@ class FogoApplication : Application() {
         trip = TripEngine(profile, cities)
         sdk = PlatformServices(this)
         speech = ArrivalSpeech(this, sdk)
+        friends = loadFriends(this)
         car = CarSignals(this)
         car.connect()
         // Night (19시–6시) was only re-evaluated when a vehicle signal changed, so the theme stayed 주간 and a trip
@@ -90,6 +106,9 @@ class FogoApplication : Application() {
             sdk.startLocation(
                 onFix = { fix ->
                     if (session == locationSession && recording && replayCity == null) {
+                        lastPoint = fix.point
+                        lastPointAt = System.currentTimeMillis()
+                        checkCommute()
                         val recovered = locationIssue != null
                         locationIssue = null
                         arrived(trip.location(fix, System.currentTimeMillis()))
@@ -123,7 +142,14 @@ class FogoApplication : Application() {
 
     fun updateGear(gear: Gear) {
         if (realGear == gear) return
+        val wasDriving = realGear == Gear.DRIVE
         realGear = gear
+        if (replayCity == null) {
+            if (gear == Gear.DRIVE && !wasDriving) driveStart = currentPoint
+            // The fix that shows where the car stopped can arrive a little after P, so keep looking for a while.
+            if (gear == Gear.PARK && wasDriving) commuteCheckUntil = System.currentTimeMillis() + COMMUTE_WINDOW_MS
+            checkCommute()
+        }
         if (replayCity == null) arrived(trip.gear(gear, System.currentTimeMillis()))
         if (realDriving && replayRunning) interruptReplay()
         if (!parked) speech.stop() else {
@@ -188,6 +214,8 @@ class FogoApplication : Application() {
         ambientStatus = null
         replayHandler.postDelayed({
             val now = System.currentTimeMillis()
+            // A passenger gets in before the departure: the passenger door opens and closes.
+            if (city.companion) trip.tags(TripTags(city.rain, city.night, true), now)
             trip.tags(TripTags(city.rain, city.night, false), now)
             trip.gear(Gear.DRIVE, now)
             redraw?.invoke()
@@ -210,7 +238,6 @@ class FogoApplication : Application() {
             replayRunning = false
             arrived(trip.gear(Gear.PARK, now))
             profile.closePreviousMonth(cities)
-            if (city.companion) trip.tags(TripTags(city.rain, city.night, true), now)
             redraw?.invoke()
         }, 1000L + route.size * 280)
         redraw?.invoke()
@@ -232,6 +259,8 @@ class FogoApplication : Application() {
 
     fun resetDemo() {
         if (!parked || replayRunning || !profile.reset()) return
+        profile.rebaseOdometer(odometerKm)
+        notices.clear()
         val city = replayCity
         if (city != null) prepareReplay(city) else {
             stopService(Intent(this, RecordingService::class.java))
@@ -244,6 +273,57 @@ class FogoApplication : Application() {
             applyLiveTags()
             redraw?.invoke()
         }
+    }
+
+    /** Odometer from Vehicle SDK: queues the 차 생일 sheet when a 10,000 km milestone is passed. */
+    fun updateOdometer(km: Double) {
+        odometerKm = km
+        val milestone = profile.noteOdometer(km)
+        if (milestone != null) {
+            val count = milestone / Profile.BIRTHDAY_KM
+            notices.add(Notice("BIRTHDAY", "${profile.car}의 ${count}만 km 생일", "오늘은 내 차의 ${count}만 km 생일이에요. " +
+                "생일 스티커와 한정 재료 1개를 받았어요. 한정 재료로 고래 모자를 만들 수 있어요.",
+                "지도판에 붙이기", Page.BOARD, "오늘은 ${profile.car}의 ${count}만 킬로미터 생일이에요"))
+        }
+        redraw?.invoke()
+    }
+
+    /** Demo friends: a request to a known code is accepted from the friend's car a few seconds later. */
+    fun requestFriend(friend: Friend): Boolean {
+        if (!profile.requestFriend(friend.id)) return false
+        handler.postDelayed({
+            if (profile.requestedFriend(friend.id) && profile.acceptFriend(friend.id)) {
+                notices.add(Notice("FRIEND", "${friend.name.particle("과", "와")} 친구가 됐어요", "${friend.name.particle("이", "가")} 자기 차에서 요청을 수락했어요. " +
+                    "이제 서로의 지도판과 차고를 구경하고 스티커로 반응할 수 있어요. (시연)", "친구 보기", Page.FRIENDS))
+                redraw?.invoke()
+            }
+        }, FRIEND_ACCEPT_MS)
+        return true
+    }
+
+    fun speak(text: String) {
+        if (parked) sdk.speak(text, hybrid, {}, {})
+    }
+
+    /** 출퇴근: a drive from near one registered place that stops near the other counts once. */
+    private fun checkCommute() {
+        if (System.currentTimeMillis() > commuteCheckUntil || realGear != Gear.PARK) return
+        val home = profile.place("home") ?: return
+        val work = profile.place("work") ?: return
+        val start = driveStart ?: return
+        val end = currentPoint ?: return
+        fun near(a: Point, b: Point) = a.distanceTo(b) <= COMMUTE_RADIUS_M
+        val commute = (near(start, home) && near(end, work)) || (near(start, work) && near(end, home))
+        if (!commute) return
+        commuteCheckUntil = 0
+        driveStart = null
+        if (profile.addCommute()) {
+            notices.add(Notice("COMMUTE", "이번 주 출퇴근 ${Profile.COMMUTE_GOAL}/${Profile.COMMUTE_GOAL} 완료",
+                "같은 길도 쌓였어요. 공용 재료 +${Profile.COMMUTE_MATERIALS}, 출퇴근 스티커를 받았어요.", "공방 가기", Page.WORKSHOP))
+        } else {
+            say?.invoke("출퇴근 루틴 ${profile.commutes()}/${Profile.COMMUTE_GOAL}")
+        }
+        redraw?.invoke()
     }
 
     private fun arrived(arrival: Arrival?) {
@@ -277,4 +357,14 @@ class FogoApplication : Application() {
             }
         }
     }
+
+    private companion object {
+        const val COMMUTE_RADIUS_M = 500.0
+        const val COMMUTE_WINDOW_MS = 20_000L
+        const val FRIEND_ACCEPT_MS = 4_000L
+    }
 }
+
+/** A sheet shown on the next parked screen; [target] is where its main button goes, [speak] is read aloud. */
+data class Notice(val tag: String, val title: String, val message: String, val action: String? = null,
+                  val target: Page? = null, val speak: String? = null)

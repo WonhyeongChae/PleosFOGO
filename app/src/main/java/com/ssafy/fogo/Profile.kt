@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.temporal.IsoFields
+import kotlin.math.floor
 
 data class TicketBook(
     val month: YearMonth,
@@ -60,6 +62,78 @@ class Profile(context: Context, preferenceName: String = "fogo_profile") {
     }
     fun newBlocksToday(day: LocalDate = LocalDate.now()) =
         entries("blockDays").let { table -> table.keys().asSequence().count { table.optString(it) == day.toString() } }
+
+    // 친구 (demo: friends come from assets/friends.json; this keeps who is a friend and what I sent them)
+    val friendCode: String get() = record.optString("code", seed.optString("code", "000000"))
+    fun isFriend(id: String) = entries("friends").has(id)
+    fun requestedFriend(id: String) = entries("friendRequests").has(id)
+    fun requestFriend(id: String, day: LocalDate = LocalDate.now()): Boolean =
+        !isFriend(id) && update { table("friendRequests").put(id, day.toString()) }
+    fun acceptFriend(id: String, day: LocalDate = LocalDate.now()): Boolean {
+        if (!requestedFriend(id)) return isFriend(id)
+        return update {
+            table("friendRequests").remove(id)
+            table("friends").put(id, day.toString())
+        }
+    }
+    fun reaction(id: String): String? = entries("reactions").optString(id).ifBlank { null }
+    fun react(id: String, sticker: String) = isFriend(id) && update { table("reactions").put(id, sticker) }
+    fun blockDays(): Map<String, String> = entries("blockDays").let { it.keys().asSequence().associateWith(it::getString) }
+
+    // 차 생일: every [BIRTHDAY_KM] of the odometer. Milestones already behind the car when FOGO first saw it are not celebrated.
+    fun birthdays() = entries("birthdays").keys().asSequence().mapNotNull(String::toIntOrNull).sorted().toList()
+    fun nextBirthday(km: Double) = ((floor(km / BIRTHDAY_KM).toInt() + 1) * BIRTHDAY_KM)
+
+    /** Records the odometer; returns the milestone (km) to celebrate now, if this reading just passed one. */
+    fun noteOdometer(km: Double, day: LocalDate = LocalDate.now()): Int? {
+        if (km < 0 || km.isNaN()) return null
+        if (!record.has("odometerBase")) {
+            update { put("odometerBase", km) }
+            return null
+        }
+        val milestone = floor(km / BIRTHDAY_KM).toInt() * BIRTHDAY_KM
+        if (milestone <= 0 || milestone <= record.optDouble("odometerBase", km) || entries("birthdays").has("$milestone")) return null
+        val celebrated = update {
+            table("birthdays").put("$milestone", day.toString())
+            table("stickers").put(BIRTHDAY_STICKER, true)
+            table("materials").put(LIMITED, materialCount(LIMITED) + 1)
+        }
+        return milestone.takeIf { celebrated }
+    }
+
+    /** Starts the odometer over from [km] (demo reset), so the next milestone after it is the next birthday. */
+    fun rebaseOdometer(km: Double?) = km == null || update { put("odometerBase", km) }
+
+    // 출퇴근 루틴: two registered places; a drive that ends near one after starting near the other counts.
+    fun place(name: String): Point? = entries("places").optString(name).split(',').let { parts ->
+        val lat = parts.getOrNull(0)?.toDoubleOrNull()
+        val lon = parts.getOrNull(1)?.toDoubleOrNull()
+        if (lat != null && lon != null) Point(lat, lon) else null
+    }
+    fun setPlace(name: String, point: Point) = update { table("places").put(name, "${point.latitude},${point.longitude}") }
+    fun commutes(day: LocalDate = LocalDate.now()) = entries("commutes").optInt(week(day))
+    val commuteDone get() = entries("commuteRewards").length() > 0
+
+    /** Counts one commute; true when it completes this week's routine (and pays its reward). */
+    fun addCommute(day: LocalDate = LocalDate.now()): Boolean {
+        val key = week(day)
+        val count = commutes(day) + 1
+        val reward = count >= COMMUTE_GOAL && !entries("commuteRewards").has(key)
+        val saved = update {
+            table("commutes").put(key, count)
+            if (reward) {
+                table("commuteRewards").put(key, true)
+                table("stickers").put(COMMUTE_STICKER, true)
+                table("materials").put(COMMON, materialCount(COMMON) + COMMUTE_MATERIALS)
+            }
+        }
+        return saved && reward
+    }
+
+    /** Demo: this week's count, so one real drive can finish the routine on stage. */
+    fun setCommutes(count: Int, day: LocalDate = LocalDate.now()) = update { table("commutes").put(week(day), count) }
+
+    private fun week(day: LocalDate) = "%d-W%02d".format(day.get(IsoFields.WEEK_BASED_YEAR), day.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR))
 
     fun completeOnboarding(name: String) = update { put("onboarded", true); put("mascot", name) }
     fun selectMascot(name: String) = update { put("mascot", name) }
@@ -217,4 +291,14 @@ class Profile(context: Context, preferenceName: String = "fogo_profile") {
 
     private fun JSONObject.table(key: String): JSONObject = optJSONObject(key)
         ?: JSONObject().also { put(key, it) }
+
+    companion object {
+        const val BIRTHDAY_KM = 10_000
+        const val BIRTHDAY_STICKER = "STK_BIRTHDAY"
+        const val COMMUTE_STICKER = "STK_COMMUTE"
+        const val COMMUTE_GOAL = 5
+        const val COMMUTE_MATERIALS = 2
+        private const val LIMITED = "MAT_LIMITED"
+        private const val COMMON = "MAT_COMMON"
+    }
 }
