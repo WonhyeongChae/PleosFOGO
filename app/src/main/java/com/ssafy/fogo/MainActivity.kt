@@ -495,7 +495,14 @@ class MainActivity : Activity() {
         ui.text(sheet, title, 25f, bold = true)
         if (message != null) ui.text(sheet, message, 16f, colors.muted)
         body?.let { sheet.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.fx(8) }) }
-        ui.actions(sheet, actions.map { act -> act.copy(click = { dialog?.dismiss(); act.click() }) }, topMargin = 16)
+        ui.actions(sheet, actions.map { act ->
+            act.copy(click = {
+                dialog?.dismiss()
+                act.click()
+                // The next waiting notice (e.g. 출퇴근 after 차 생일) follows once this sheet is closed.
+                if (fogo.notices.isNotEmpty()) window.decorView.post(::showNextNotice)
+            })
+        }, topMargin = 16)
         showDialog(AlertDialog.Builder(this).setView(ScrollView(this).apply { addView(sheet) }))
         dialog?.window?.apply {
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
