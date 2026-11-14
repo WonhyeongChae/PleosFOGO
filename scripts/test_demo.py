@@ -133,7 +133,9 @@ def main():
     tap("만들기")
     tap("입히기에서 보기")
     tap("입히기")
-    wait_for("구름 목도리 · 장착 중")
+    # The dress card shows the name and its status ("장착 중") on separate lines.
+    wait_for("구름 목도리")
+    wait_for("장착 중")
     tap("뒤로", "content-desc")
     tap("기록 이어받기(시연)")
     wait_for("그랜저로 이어받기")

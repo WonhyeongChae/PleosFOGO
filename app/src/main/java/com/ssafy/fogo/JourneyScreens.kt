@@ -203,8 +203,9 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
                 setPadding(ui.fx(6), ui.fx(4), ui.fx(6), ui.fx(4))
                 setOnClickListener { regionId = item.id; host.go(Page.REGION) }
             }
-            // Figma rows sit 53 px apart; every piece stays on one line.
-            panel.addView(row, LinearLayout.LayoutParams(-1, ui.fx(53)).apply { topMargin = ui.fx(2) })
+            // Each row opens its 시·도, so it is a touch target: 76 (the Android Automotive minimum) rather than
+            // Figma's 53, agreed with the designer. Every piece stays on one line.
+            panel.addView(row, LinearLayout.LayoutParams(-1, ui.fx(TAB)).apply { topMargin = ui.fx(2) })
             row.addView(ui.label(item.name, 17f, bold = true).apply { maxLines = 1 }, LinearLayout.LayoutParams(ui.fx(72), -2))
             val meter = ui.column()
             row.addView(meter, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.fx(12) })
@@ -393,8 +394,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
             code = "FG-" + arrival.day.filter(Char::isDigit).takeLast(8)))
         val panel = pass.body
         // FROM (last place reached before this one) ····· TO region, then the OPEN chip, as in Figma T1.
-        val from = fogo.cities.filter { it.spotId != city.spotId && profile.visited(it) }
-            .maxByOrNull { profile.visitDate(it) ?: "" }?.region
+        val from = profile.visitedBefore(city, fogo.cities)?.region
         val route = ui.row().apply { gravity = Gravity.BOTTOM }
         panel.addView(route, LinearLayout.LayoutParams(-1, -2))
         if (from != null) {
@@ -594,7 +594,7 @@ class JourneyScreens(private val host: MainActivity, state: Bundle?) {
                 }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = ui.fx(4) })
             }
         }, 3, gap = 8)
-        ui.text(right, if (pendingCell == null) "지도에서 열린 칸을 골라요." else "선택한 칸에 ${selected?.name}을 붙일 수 있어요.", 16f, c.muted)
+        ui.text(right, if (pendingCell == null) "지도에서 열린 칸을 골라요." else "선택한 칸에 ${selected?.name?.particle("을", "를")} 붙일 수 있어요.", 16f, c.muted)
         right.addView(View(host), if (ui.wide) LinearLayout.LayoutParams(1, 0, 1f) else LinearLayout.LayoutParams(1, ui.fx(16)))
         right.addView(ui.action("여기 붙이기", primary = true, enabled = pendingCell != null && selected != null, height = 104) {
             if (!fogo.parked || selected == null) return@action
@@ -727,7 +727,15 @@ internal fun ticketPass(host: MainActivity, parent: LinearLayout, spec: TicketSp
         setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
         rotation = -8f
     }
-    stampBox.addView(ui.label(spec.stamp, 20f, c.dark, pixel = true).apply { gravity = Gravity.CENTER })
+    // One line, shrunk to fit the stub: a Latin stamp like "HELLO!" has no word joiners and used to break as "HELL/O!".
+    val stampRoom = if (ui.wide) ui.fx(260) - ui.dp(36 + 28 + 8) else Int.MAX_VALUE
+    stampBox.addView(ui.label(spec.stamp, 20f, c.dark, pixel = true).apply {
+        gravity = Gravity.CENTER
+        maxLines = 1
+        while (paint.measureText(text.toString()) > stampRoom && textSize > ui.dp(10)) {
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, textSize * .92f)
+        }
+    })
     stampBox.addView(ui.label(spec.stampSub, 17f, c.dark, bold = true).apply { gravity = Gravity.CENTER })
     content.addView(stampBox, LinearLayout.LayoutParams(-2, -2).apply {
         if (ui.wide) bottomMargin = ui.dp(22) else marginEnd = ui.dp(28)

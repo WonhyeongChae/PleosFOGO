@@ -47,7 +47,7 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
         ui.split(body, { left -> garagePreview(left) }, { right ->
             val panel = ui.card(right)
             ui.text(panel, profile.car, 35f, bold = true)
-            ui.text(panel, "${profile.mascot}와 함께 · 지도판 ${profile.blocks.size}블록", 17f, c.muted)
+            ui.text(panel, "${profile.mascot.particle("과", "와")} 함께 · 지도판 ${profile.blocks.size}블록", 17f, c.muted)
             ui.grid(panel, slots.map { (id, label) ->
                 ui.column().apply {
                     background = ui.box(c.paper)
@@ -73,7 +73,7 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
 
     private fun confirmTransfer() {
         val target = if (profile.car == "아반떼") "그랜저" else "아반떼"
-        host.showSheet("TRANSFER", "${target}로 이어받기", "이 기기의 시연 프로필을 새 차에서 이어봅니다.",
+        host.showSheet("TRANSFER", "${target.particle("으로", "로")} 이어받기", "이 기기의 시연 프로필을 새 차에서 이어봅니다.",
             actions = listOf(Act("취소") {}, Act("이어받기", true, weight = 1.4f) {
                 if (!fogo.parked) return@Act
                 val before = profile.car
@@ -93,7 +93,7 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
             catalog.mascots.firstOrNull { it.name == profile.mascot }?.id ?: "cloud",
             profile.car == "그랜저", color("wrap"), color("hat"), color("clothes"), color("bg")).apply {
             background = ui.box(c.paper)
-            contentDescription = "${profile.car}와 ${profile.mascot} 미리보기"
+            contentDescription = "${profile.car.particle("과", "와")} ${profile.mascot} 미리보기"
         }
         parent.addView(view, LinearLayout.LayoutParams(-1, ui.dp(if (ui.wide) 410 else 310))
             .apply { bottomMargin = ui.dp(13) })
@@ -173,7 +173,8 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
             ui.grid(panel, options.map { item ->
                 val owned = item == null || profile.ownsCostume(item.id)
                 val name = item?.name ?: defaultItem(slot)
-                val suffix = if (item == null) "" else if (!owned) " · 잠김" else if (profile.equipped(slot) == item.id) " · 장착 중" else ""
+                // Status on its own line: appended as " · 잠김" it wrapped as "바다 배경 ·" / "잠김".
+                val status = if (item == null) null else if (!owned) "잠김" else if (profile.equipped(slot) == item.id) "장착 중" else null
                 val chosen = (item?.id) == candidate
                 ui.column().apply {
                     gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -182,11 +183,13 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
                     background = ui.box(if (chosen) c.fog else c.paper, c.border, shadow = chosen)
                     setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10))
                     if (owned) setOnClickListener { preview(item?.id) }
-                    addView((if (item == null) ui.label("없음", 16f, c.muted).apply { gravity = Gravity.CENTER }
-                        else CostumeIcon(host, host.art, item.slot, item.color, c.night)).apply {
+                    // The no-costume option keeps an empty tile; its name below (없음 · 차고 · 기본 블루) says what it is,
+                    // where a "없음" tile used to read "없음 / 없음" on the 옷 tab.
+                    addView((if (item == null) View(host) else CostumeIcon(host, host.art, item.slot, item.color, c.night)).apply {
                         background = ui.box(c.paper)
                     }, LinearLayout.LayoutParams(-1, ui.dp(84)).apply { bottomMargin = ui.dp(8) })
-                    addView(ui.label(name + suffix, 16f, bold = chosen).apply { gravity = android.view.Gravity.CENTER })
+                    addView(ui.label(name, 16f, bold = chosen).apply { gravity = android.view.Gravity.CENTER; maxLines = 1 })
+                    if (status != null) addView(ui.label(status, 14f, c.muted).apply { gravity = android.view.Gravity.CENTER })
                 }
             }, if (ui.wide) 3 else 2)
             ui.button(panel, "입히기", true, previewing) {
@@ -398,7 +401,7 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
         ui.text(pass, "${origin ?: "이전 차량"}  →  ${profile.car}", 35f, bold = true)
         ticketFields(host, pass, listOf("지도판" to "${profile.blocks.size}블록", "티켓북" to "${profile.books().size}권",
             "수집품" to "${profile.ownedCount}개", "코스튬" to "${profile.costumeCount}종"))
-        ui.text(pass, "${profile.mascot}와 코스튬이 함께 왔어요", 19f, bold = true)
+        ui.text(pass, "${profile.mascot.particle("과", "와")} 코스튬이 함께 왔어요", 19f, bold = true)
         ui.text(pass, "차고 ${profile.garage.size}대 · 이전 차 보관 완료", 17f, c.muted)
         ui.actions(sheet, listOf(Act("차고 보기") { host.go(Page.GARAGE) },
             Act("이어서 달리기", true, weight = 2f) { host.go(Page.JOURNEY) }))

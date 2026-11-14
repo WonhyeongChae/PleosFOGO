@@ -149,6 +149,8 @@ class AtlasUi(private val context: Context, val colors: AtlasColors, val wide: B
             setPadding(dp(13), dp(8), dp(13), dp(8))
             maxLines = 2
             keepWords(this)
+            // Tabs and theme choices are told apart only by colour; expose the choice to TalkBack as well.
+            isSelected = selected
             isEnabled = enabled
             alpha = if (enabled) 1f else .58f
             setOnClickListener { click() }

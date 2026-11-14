@@ -13,7 +13,6 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Toast
 
 enum class Page(val title: String) {
     INTRO("FOGO"), CONSENT("위치 기록 동의"), MASCOT("같이 달릴 친구"), ATLAS("아틀라스"),
@@ -38,6 +37,7 @@ class MainActivity : Activity() {
     private var permissionDenied = false
     private var permissionFromOnboarding = false
     private var dialog: AlertDialog? = null
+    private var notice: View? = null
     private var scroll: ScrollView? = null
     private var lastPage: Page? = null
     /** True while the current render is the first one for [page]; screens use it for entrance motion. */
@@ -107,8 +107,12 @@ class MainActivity : Activity() {
 
     fun render() {
         val now = fogo.trip.arrival?.city
-        if (now == null) arrivalSeen = null
-        else if (fogo.parked && profile.onboarded && arrivalSeen != now.spotId) {
+        if (now == null) {
+            arrivalSeen = null
+            // The ticket's trip is gone (실제 차량 모드로 돌아가기, reset): the headerless, rail-less ARRIVAL frame
+            // would be left with no way to the other tabs, so fall back to the destination screen.
+            if (page == Page.ARRIVAL) page = Page.JOURNEY
+        } else if (fogo.parked && profile.onboarded && arrivalSeen != now.spotId) {
             page = Page.ARRIVAL
             journey.focus(now)
             arrivalSeen = now.spotId
@@ -292,7 +296,7 @@ class MainActivity : Activity() {
         val warning = if (asked && missing.isNotEmpty()) " 한 번 더 거부하면 다시 물어볼 수 없고, Pleos 위치는 차량 설정에서도 켤 수 없어요." else ""
         showSheet("LOCATION", "위치 기록 시작",
             "차량 위치를 1km 블록으로 바꿔 기기에 저장해요. Android 위치와 Pleos 위치 접근을 허용해 주세요. " +
-                "두 번째 창의 '알 수 없는 작업 실행'이 Pleos 위치 접근이에요.$warning",
+                "'알 수 없는 작업 실행'을 묻는 창이 Pleos 위치 접근이에요.$warning",
             actions = listOf(Act("기록 없이 둘러보기") {}, Act("계속", true, weight = 1.4f) { requestRecording(false) }))
     }
 
@@ -300,9 +304,19 @@ class MainActivity : Activity() {
         if (!fogo.parked) return
         permissionFromOnboarding = onboarding
         val missing = locationPermissions.filter { checkSelfPermission(it) != PERMISSION_GRANTED }
-        if (missing.isEmpty()) return finishPermission()
-        permissionPreferences.edit().putBoolean("locationAsked", true).apply()
-        requestPermissions(missing.toTypedArray(), 7)
+        // The recording notification ("FOGO 주행 기록") is the only sign that location is being kept, but Android 13+
+        // hides it until POST_NOTIFICATIONS is granted, and it was never asked for. Ask once, alongside location;
+        // recording does not depend on it, so a refusal still records.
+        val notify = listOf(Manifest.permission.POST_NOTIFICATIONS).filter {
+            android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(it) != PERMISSION_GRANTED &&
+                !permissionPreferences.getBoolean("notificationAsked", false)
+        }
+        if (missing.isEmpty() && notify.isEmpty()) return finishPermission()
+        permissionPreferences.edit().apply {
+            if (missing.isNotEmpty()) putBoolean("locationAsked", true)
+            if (notify.isNotEmpty()) putBoolean("notificationAsked", true)
+        }.apply()
+        requestPermissions((missing + notify).toTypedArray(), 7)
     }
 
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
@@ -422,7 +436,33 @@ class MainActivity : Activity() {
         dialog = builder.show()
     }
 
-    fun message(value: String) = Toast.makeText(this, value, Toast.LENGTH_SHORT).show()
+    /**
+     * A short notice drawn by the app itself. Toasts never appear on Pleos Connect: FOGO runs as the car user
+     * (user 10) and the system's toast window hides them at once ("Attempt to hide non-current toast"), so every
+     * notice (share, crafting, navi, saving errors) used to vanish. Sits on the decor view so re-renders keep it.
+     */
+    fun message(value: String) {
+        val decor = window.decorView as? FrameLayout ?: return
+        notice?.let { decor.removeView(it) }
+        val view = ui.label(value, 17f, colors.white, bold = true).apply {
+            gravity = Gravity.CENTER
+            background = ui.box(colors.dark, colors.lime, shadow = true)
+            setPadding(ui.dp(28), ui.dp(16), ui.dp(28), ui.dp(16))
+            alpha = 0f
+        }
+        decor.addView(view, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = ui.dp(140)
+        })
+        notice = view
+        view.announceForAccessibility(value)
+        view.animate().alpha(1f).setDuration(150).start()
+        view.postDelayed({
+            view.animate().alpha(0f).setDuration(250).withEndAction {
+                decor.removeView(view)
+                if (notice === view) notice = null
+            }.start()
+        }, 2600)
+    }
 
     companion object {
         private val BARCODE = listOf("#.##.#.###.#.##.#.#", "#.##.#.###.#.##.#.#", "#.##.#.###.#.##.#.#")
