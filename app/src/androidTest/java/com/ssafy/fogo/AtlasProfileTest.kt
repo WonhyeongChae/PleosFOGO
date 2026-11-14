@@ -84,9 +84,40 @@ class AtlasProfileTest {
         val actual = profile.books(today).single { !it.example }
         assertEquals(1, actual.newRegions)
         assertEquals(1, actual.visits)
+        assertEquals("밤 · ${city.spot}", actual.memory)
         assertNull(actual.stickers)
         assertNull(actual.boardAfter)
         assertNull(actual.commute)
+        assertEquals("그랜저", Profile(context, key).car)
+    }
+
+    @Test fun monthlyMemoryNeverPresentsTheNoTagDefaultAsWeather() {
+        val (tagged, untagged) = cities.take(2)
+        val spots = JSONObject()
+            .put(untagged.spotId, JSONObject().put("day", "2026-10-02").put("tags", TripTags().summary()))
+            .put(tagged.spotId, JSONObject().put("day", "2026-10-03").put("tags", "밤"))
+        context.getSharedPreferences(key, 0).edit()
+            .putString("record", JSONObject().put("car", "그랜저").put("spots", spots).toString()).commit()
+        val profile = Profile(context, key)
+        val today = LocalDate.of(2026, 11, 1)
+        assertTrue(profile.closePreviousMonth(cities, today))
+        assertEquals("밤 · ${tagged.spot}", profile.books(today).single { !it.example }.memory)
+
+        val onlyUntagged = JSONObject().put(untagged.spotId, JSONObject().put("day", "2026-10-02").put("tags", TripTags().summary()))
+        context.getSharedPreferences(key, 0).edit()
+            .putString("record", JSONObject().put("car", "그랜저").put("spots", onlyUntagged).toString()).commit()
+        val plain = Profile(context, key)
+        assertTrue(plain.closePreviousMonth(cities, today))
+        assertEquals(untagged.spot, plain.books(today).single { !it.example }.memory)
+    }
+
+    @Test fun unreadableRecordStartsFromTheSeedInsteadOfCrashing() {
+        val broken = "{\"car\":\"그랜저\",\"blocks\":{"
+        context.getSharedPreferences(key, 0).edit().putString("record", broken).commit()
+        val profile = Profile(context, key)
+        assertEquals("아반떼", profile.car)
+        assertEquals(broken, context.getSharedPreferences(key, 0).getString("record_unreadable", null))
+        assertTrue(profile.changeCar("그랜저"))
         assertEquals("그랜저", Profile(context, key).car)
     }
 

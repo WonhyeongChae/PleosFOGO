@@ -1,6 +1,5 @@
 package com.ssafy.fogo
 
-import android.app.AlertDialog
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -74,16 +73,15 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
 
     private fun confirmTransfer() {
         val target = if (profile.car == "아반떼") "그랜저" else "아반떼"
-        host.showDialog(AlertDialog.Builder(host).setTitle("${target}로 이어받기")
-            .setMessage("이 기기의 시연 프로필을 새 차에서 이어봅니다.")
-            .setNegativeButton("취소", null).setPositiveButton("이어받기") { _, _ ->
-                if (!fogo.parked) return@setPositiveButton
+        host.showSheet("TRANSFER", "${target}로 이어받기", "이 기기의 시연 프로필을 새 차에서 이어봅니다.",
+            actions = listOf(Act("취소") {}, Act("이어받기", true, weight = 1.4f) {
+                if (!fogo.parked) return@Act
                 val before = profile.car
                 if (profile.changeCar(target)) {
                     previousCar = before
                     host.go(Page.TRANSFER)
                 } else host.message("차량 전환을 저장하지 못했어요")
-            })
+            }))
     }
 
     private fun garagePreview(parent: LinearLayout, usePreview: Boolean = false) {
@@ -255,12 +253,14 @@ class CollectionScreens(private val host: MainActivity, state: Bundle?) {
             setPadding(ui.dp(3), ui.dp(3), ui.dp(7), ui.dp(7))
         }
         body.addView(stats, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(6); bottomMargin = ui.dp(6) })
+        // The totals add up the sample books too, so say so like each sample card does (예시) — never a real count.
+        val sample = if (books.any { it.example }) " · 예시 포함" else ""
         listOf("TOTAL" to "지금까지 티켓 ${books.sumOf { it.visits } + currentMonthVisits}장",
             "BOOKS" to "티켓북 ${books.size}권",
             "REGIONS" to "새 지역 ${books.sumOf { it.newRegions }}곳").forEach { (key, value) ->
             val cell = ui.column().apply { setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(12)) }
             stats.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
-            cell.addView(ui.label(key, 11f, c.muted, pixel = true))
+            cell.addView(ui.label(key + sample, 11f, c.muted, pixel = true))
             cell.addView(ui.label(value, 20f, bold = true))
         }
         books.firstOrNull()?.let { latest ->

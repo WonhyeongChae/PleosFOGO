@@ -56,9 +56,11 @@ class KoreaBoard(
     private val paint = Paint()
     private val text = Paint().apply { isAntiAlias = true; typeface = context.resources.getFont(R.font.galmuri_bold) }
     private val cells: Map<Cell, List<Block>> = open.mapNotNull { parse(it) }.groupBy { cellOf(it) }
-    private val stickers: Map<Cell, BoardItem> = placed.entries.mapNotNull { (block, item) ->
+    private val stickers: Map<Cell, List<BoardItem>> = placed.entries.mapNotNull { (block, item) ->
         parse(block)?.let { cellOf(it) to item }
-    }.toMap()
+    }.groupBy({ it.first }, { it.second })
+    /** Reused by [sticker] so drawing allocates nothing. */
+    private val box = RectF()
     private val pendingCell = pending?.let { parse(it) }?.let { cellOf(it) }
     private val view: ViewState = STATES.getOrPut(key) {
         // Zoom is settled once the size is known: -1 = focus at Figma A3 tile size, 0 = mainland fills the board.
@@ -123,6 +125,23 @@ class KoreaBoard(
         invalidate()
     }
 
+    /**
+     * Pans the least needed so every tile in [tiles] (with its sticker overhang) is on screen,
+     * on each axis where they fit at the current zoom.
+     */
+    private fun keepInView(tiles: Collection<Cell>) {
+        if (tiles.isEmpty() || cell <= 0f) return
+        val margin = STICKER_OVERHANG
+        fun shift(center: Float, half: Float, low: Float, high: Float): Float = when {
+            high - low > half * 2 -> center
+            low < center - half -> low + half
+            high > center + half -> high - half
+            else -> center
+        }
+        view.x = shift(view.x, width / 2f / cell, tiles.minOf { it.column } - margin, tiles.maxOf { it.column } + 1 + margin)
+        view.y = shift(view.y, height / 2f / cell, tiles.minOf { it.row } - margin, tiles.maxOf { it.row } + 1 + margin)
+    }
+
     private fun clampCenter() {
         if (base <= 0f) return
         val halfW = width / 2f / cell
@@ -139,6 +158,13 @@ class KoreaBoard(
             view.zoom = maxOf(h / MAINLAND_ROWS.toFloat(), w / LAND_COLUMNS.toFloat()).div(base).coerceIn(1f, MAX_ZOOM)
         }
         if (base > 0f && view.zoom < 0f) view.zoom = (ui.fx(FOCUS_TILE) / base).coerceIn(1f, MAX_ZOOM)
+        // That fill crops the mainland's top and bottom on a near-square board: pan so stickers placed since
+        // the last look are whole (all of them the first time), leaving the user's own pan alone otherwise.
+        if (base > 0f && pick == null) {
+            // By item, not tile: neighbouring blocks share a tile, so a new sticker may land on an occupied one.
+            keepInView(placed.filter { (_, item) -> item.id !in view.seen }.keys.mapNotNull { parse(it)?.let { block -> cellOf(block) } })
+            view.seen += placed.values.map { it.id }
+        }
         clampCenter()
     }
 
@@ -167,9 +193,13 @@ class KoreaBoard(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        val tap = event.actionMasked == MotionEvent.ACTION_UP && !dragging && !scaler.isInProgress
         track(event)
+        if (tap) performClick() // a tap on the board itself (not a tile) still reaches accessibility services
         return true
     }
+
+    override fun performClick() = super.performClick()
 
     private fun track(event: MotionEvent) {
         scaler.onTouchEvent(event)
@@ -269,23 +299,35 @@ class KoreaBoard(
                 canvas.drawText(name, cx - w / 2, cy, text)
             }
         }
-        stickers.forEach { (tile, item) -> sticker(canvas, tile, item) }
-        if (preview != null && pendingCell != null && pendingCell !in stickers) {
-            sticker(canvas, pendingCell, preview)
+        stickers.forEach { (tile, items) ->
+            sticker(canvas, tile, if (tile == pendingCell && preview != null) items + preview else items)
+        }
+        if (preview != null && pendingCell != null) {
+            if (pendingCell !in stickers) sticker(canvas, pendingCell, listOf(preview))
             bubble(canvas, pendingCell)
         }
         if (pick != null) hint(canvas)
     }
 
-    private fun sticker(canvas: Canvas, tile: Cell, item: BoardItem) {
-        val size = (cell * 1.25f).coerceIn(ui.dp(26).toFloat(), ui.fx(110).toFloat())
-        val cx = originX + (tile.column + .5f) * cell
+    /**
+     * Draws a tile's stickers. Neighbouring 1 km blocks share a tile, so several can land on one:
+     * they fan out sideways, a little smaller, so none hides another (a magnet under a sticker, say).
+     */
+    private fun sticker(canvas: Canvas, tile: Cell, items: List<BoardItem>) {
+        val size = (cell * 1.25f).coerceIn(ui.dp(26).toFloat(), ui.fx(110).toFloat()) * if (items.size > 1) .8f else 1f
+        items.forEachIndexed { index, item ->
+            sticker(canvas, tile, item, index, size, (index - (items.size - 1) / 2f) * size * .55f)
+        }
+    }
+
+    private fun sticker(canvas: Canvas, tile: Cell, item: BoardItem, index: Int, size: Float, offset: Float) {
+        val cx = originX + (tile.column + .5f) * cell + offset
         val cy = originY + (tile.row + .5f) * cell
         if (cx < -size || cy < -size || cx > width + size || cy > height + size) return
-        val box = RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
+        val box = this.box.apply { set(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2) }
         val edge = maxOf(2f, size / 14f)
         canvas.save()
-        canvas.rotate(if ((tile.column + tile.row) % 2 == 0) -6f else 5f, cx, cy)
+        canvas.rotate(if ((tile.column + tile.row + index) % 2 == 0) -6f else 5f, cx, cy)
         paint.color = colors.dark
         canvas.drawRect(box.left + edge, box.top + edge, box.right + edge, box.bottom + edge, paint)
         paint.color = 0xffffffff.toInt()
@@ -338,11 +380,12 @@ class KoreaBoard(
         val h = ui.dp(34).toFloat()
         val y = height - h - pad
         paint.color = 0xe644464e.toInt()
-        canvas.drawRoundRect(RectF(pad, y, pad + w, y + h), h / 2, h / 2, paint)
+        canvas.drawRoundRect(box.apply { set(pad, y, pad + w, y + h) }, h / 2, h / 2, paint)
         canvas.drawText(label, pad * 2, y + h * .66f, text)
     }
 
-    private class ViewState(var zoom: Float, var x: Float, var y: Float)
+    /** [seen]: placed items already brought into view, so a pan the user made is kept until a new one is placed. */
+    private class ViewState(var zoom: Float, var x: Float, var y: Float, val seen: MutableSet<String> = mutableSetOf())
     private data class Cell(val column: Int, val row: Int)
 
     companion object {
@@ -359,6 +402,8 @@ class KoreaBoard(
         private val ORIGIN_Y = (LAT_TOP - 36.0) * KM_PER_LAT
         private val STATES = mutableMapOf<String, ViewState>()
         private const val MAX_ZOOM = 5f
+        /** How far stickers reach past their tile, in tiles: 1.25 tiles tilted with a shadow, or a fan of several. */
+        private const val STICKER_OVERHANG = 1f
         /** Tile size when placing around a spot (Figma A3 ≈ 87 px, a dozen tiles across). */
         private const val FOCUS_TILE = 88
         private const val LABEL_ZOOM = 1.8f
