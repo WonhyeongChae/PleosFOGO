@@ -4,8 +4,23 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 from xml.etree import ElementTree
+
+
+def find_adb():
+    """adb from ANDROID_HOME, else the SDK's default place on Windows, macOS or Linux."""
+    home = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+    if home:
+        sdk = Path(home)
+    elif os.name == "nt":
+        sdk = Path(os.environ["LOCALAPPDATA"]) / "Android/Sdk"
+    elif sys.platform == "darwin":
+        sdk = Path.home() / "Library/Android/sdk"
+    else:
+        sdk = Path.home() / "Android/Sdk"
+    return sdk / "platform-tools" / ("adb.exe" if os.name == "nt" else "adb")
 
 
 def main():
@@ -16,8 +31,7 @@ def main():
     if not args.serial.startswith("emulator-") or not args.reset:
         parser.error("에뮬레이터에서 FOGO 테스트 데이터를 초기화하려면 --reset을 지정하세요.")
 
-    sdk = Path(os.environ.get("ANDROID_HOME") or Path(os.environ["LOCALAPPDATA"]) / "Android/Sdk")
-    adb = sdk / "platform-tools/adb.exe"
+    adb = find_adb()
     package = "com.ssafy.fogo"
 
     def call(*command):
@@ -33,13 +47,19 @@ def main():
             return []
         return list(ElementTree.fromstring(shell("cat", path)).iter("node"))
 
+    def value(node, attribute):
+        # Labels glue Korean words with U+2060 WORD JOINER so they only wrap at spaces.
+        return node.get(attribute, "").replace("\u2060", "")
+
     def locate(entries, needle, attribute):
-        matching = [node for node in entries if node.get(attribute, "") == needle]
-        matching += [node for node in entries if node.get(attribute, "").strip().endswith("\n" + needle)]
+        matching = [node for node in entries if value(node, attribute) == needle]
+        matching += [node for node in entries if value(node, attribute).strip().endswith("\n" + needle)]
+        # The arrival line may carry the trip's 상황 태그 after it ("경포대 도착 · 비 오는 날 · 밤").
+        matching += [node for node in entries if value(node, attribute).startswith(needle + " · ")]
         return next((node for node in matching if node.get("clickable") == "true" and node.get("enabled") != "false"),
                     next(iter(matching), None))
 
-    def wait_for(needle, timeout=15, attribute="text"):
+    def wait_for(needle, timeout=20, attribute="text"):
         end = time.monotonic() + timeout
         last = []
         while time.monotonic() < end:
@@ -47,7 +67,7 @@ def main():
             hit = locate(last, needle, attribute)
             if hit is not None:
                 return hit
-        visible = [node.get("text") for node in last if node.get("text")]
+        visible = [value(node, "text") for node in last if node.get("text")]
         raise AssertionError(f"{needle!r} 화면에 없음. 표시된 텍스트: {visible}")
 
     def tap(needle, attribute="text"):
@@ -57,7 +77,7 @@ def main():
         shell("input", "tap", str((left + right) // 2), str((top + bottom) // 2))
 
     def assert_text_contains(needle):
-        assert any(needle in node.get("text", "") for node in nodes()), needle
+        assert any(needle in value(node, "text") for node in nodes()), needle
 
     def launch():
         shell("am", "start", "--user", user, "-W", "-n", package + "/.MainActivity")
@@ -68,13 +88,13 @@ def main():
         wait_for("목적지 미리보기")
         tap("주행 재생")
         wait_for("기록 중", 9)
-        assert not any(node.get("text", "").strip().endswith("차고") for node in nodes())
+        assert not any(value(node, "text").strip().endswith("차고") for node in nodes())
         wait_for(f"{spot} 도착")
 
     user = shell("am", "get-current-user").strip()
     assert shell("pm", "clear", "--user", user, package).strip() == "Success"
     launch()
-    tap("시작하기")
+    tap("시작하기")  # 오프닝 영상이 끝나면(약 11초) 나타나는 네온 버튼
     tap("기록 없이 둘러보기")
     tap("이 친구로 시작")
     wait_for("지역별 진행")
@@ -113,7 +133,9 @@ def main():
     tap("만들기")
     tap("입히기에서 보기")
     tap("입히기")
-    wait_for("구름 목도리 · 장착 중")
+    # The dress card shows the name and its status ("장착 중") on separate lines.
+    wait_for("구름 목도리")
+    wait_for("장착 중")
     tap("뒤로", "content-desc")
     tap("기록 이어받기(시연)")
     wait_for("그랜저로 이어받기")
@@ -122,14 +144,15 @@ def main():
     tap("차고 보기")
     wait_for("차고에 보관 중 · 아반떼")
     tap("리캡")
-    month = next(node for node in nodes() if re.fullmatch(r"\d+월 티켓북 열기", node.get("text", "")))
-    tap(month.get("text"))
+    month = next(node for node in nodes() if re.fullmatch(r"\d+월 티켓북 열기", value(node, "text")))
+    tap(value(month, "text"))
     tap("다음 장 →")
     wait_for("지도판이 이만큼 넓어졌어요")
     print("공방 제작·장착, 이전 탑승권, 티켓북 2쪽 확인", flush=True)
 
     shell("am", "force-stop", "--user", user, package)
     launch()
+    tap("시작하기")  # 오프닝 영상 뒤 시작하기 → 온보딩을 마친 기록이라 바로 아틀라스
     tap("차고")
     wait_for("그랜저")
     wait_for("구름 목도리")

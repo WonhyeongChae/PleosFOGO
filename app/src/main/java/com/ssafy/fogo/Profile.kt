@@ -20,7 +20,7 @@ data class TicketBook(
 class Profile(context: Context, preferenceName: String = "fogo_profile") {
     private val storage = context.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
     private val seed = JSONObject(context.assets.open("demo_profile.json").bufferedReader().use { it.readText() })
-    private var record = storage.getString("record", null)?.let(::JSONObject) ?: JSONObject(seed.toString())
+    private var record = load()
     private val hadRecord get() = storage.contains("record")
 
     private fun entries(key: String): JSONObject = record.optJSONObject(key) ?: JSONObject()
@@ -48,6 +48,16 @@ class Profile(context: Context, preferenceName: String = "fogo_profile") {
     fun stickerBlock(city: City) = placements[city.stickerId]
     fun visitDate(city: City): String? = entries("spots").optJSONObject(city.spotId)?.optString("day")
     fun visitTags(city: City): String? = entries("spots").optJSONObject(city.spotId)?.optString("tags")
+
+    /**
+     * The spot reached just before [city]: "spots" keeps first visits in the order they happened. Picking the latest
+     * visit date tied on same-day visits and always returned the first city in the list (FROM 강릉 on every ticket).
+     */
+    fun visitedBefore(city: City, cities: List<City>): City? {
+        val order = entries("spots").keys().asSequence().toList()
+        val previous = order.indexOf(city.spotId).let { if (it < 0) order.lastOrNull() else order.getOrNull(it - 1) }
+        return cities.firstOrNull { it.spotId == previous }
+    }
     fun newBlocksToday(day: LocalDate = LocalDate.now()) =
         entries("blockDays").let { table -> table.keys().asSequence().count { table.optString(it) == day.toString() } }
 
@@ -150,16 +160,31 @@ class Profile(context: Context, preferenceName: String = "fogo_profile") {
         if (visits.isEmpty() && placements == 0 && days.none { it.startsWith(key) }) return true
         val first = month.atDay(1).toString()
         val last = month.atEndOfMonth().toString()
-        val memory = visits.maxByOrNull { visitTags(it)?.count { char -> char == '·' } ?: 0 }
+        // Representative memory: the visit with the most 상황 태그. "맑은 날" is only the no-tag default, never observed
+        // weather, so it counts as none and is left out of the line (a one-tag visit used to tie with it).
+        fun observed(city: City) = visitTags(city)?.takeUnless { it.isBlank() || it == TripTags().summary() }
+        val memory = visits.maxByOrNull { city -> observed(city)?.let { it.count { char -> char == '·' } + 1 } ?: 0 }
         val summary = JSONObject().put("visits", visits.size)
             .put("regions", visits.groupBy(City::regionId).count { (_, matches) ->
                 val firstDay = cities.filter { it.regionId == matches.first().regionId }.mapNotNull(::visitDate).minOrNull()
                 firstDay?.startsWith(key) == true
             })
         if (placements > 0 || !unknownDates) summary.put("stickers", placements)
-        if (memory != null) summary.put("memory", "${visitTags(memory)} · ${memory.spot}")
+        if (memory != null) summary.put("memory", listOfNotNull(observed(memory), memory.spot).joinToString(" · "))
         if (days.isNotEmpty()) summary.put("before", days.count { it < first }).put("after", days.count { it <= last })
         return update { table("books").put(key, summary) }
+    }
+
+    /**
+     * The saved record, or the seed. Profile is built in FogoApplication.onCreate, so an unreadable record used to
+     * crash the app on every launch until its data was cleared: keep the broken text aside and start from the seed.
+     */
+    private fun load(): JSONObject {
+        val saved = storage.getString("record", null) ?: return JSONObject(seed.toString())
+        return runCatching { JSONObject(saved) }.getOrElse {
+            storage.edit().putString("record_unreadable", saved).apply()
+            JSONObject(seed.toString())
+        }
     }
 
     fun reset(): Boolean {

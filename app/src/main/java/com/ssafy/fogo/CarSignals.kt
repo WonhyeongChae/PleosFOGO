@@ -90,8 +90,8 @@ class CarSignals(private val app: FogoApplication) {
         val door = sdk.getDoor()
         fun state(position: Int?) { app.handler.post { app.updateVehicleTags(companion = (position ?: 0) > 0) } }
         door.registerDoorPosition(area, object : DoorPositionListener {
-            override fun onPositionUpdated(position: Int?) = state(position)
-            override fun onFailed(exception: Exception) = log(exception)
+            override fun onPositionUpdated(pos: Int?) = state(pos)
+            override fun onFailed(e: Exception) = log(e)
         })
         door.getCurrentDoorPosition(area, ::state, ::log)
     }.onFailure(::log)
@@ -102,7 +102,7 @@ class CarSignals(private val app: FogoApplication) {
         fun state(value: WiperState?) { app.handler.post { app.updateVehicleTags(rain = value == WiperState.ON) } }
         wiper.registerWiperState(area, object : WiperStateListener {
             override fun onWiperStateUpdated(state: WiperState?) = state(state)
-            override fun onFailed(exception: Exception) = log(exception)
+            override fun onFailed(e: Exception) = log(e)
         })
         wiper.getCurrentWiperState(area, ::state, ::log)
     }.onFailure(::log)
@@ -112,7 +112,7 @@ class CarSignals(private val app: FogoApplication) {
         fun state(value: LightState?) { app.handler.post { app.updateVehicleTags(night = value == LightState.ON) } }
         light.registerLowBeamLightState(object : LightStateListener {
             override fun onLightStateUpdated(state: LightState?) = state(state)
-            override fun onFailed(exception: Exception) = log(exception)
+            override fun onFailed(e: Exception) = log(e)
         })
         light.getCurrentLowBeamLightState(::state, ::log)
         light.checkAmbientLightBrightnessColorCapabilities({ _, areas ->
